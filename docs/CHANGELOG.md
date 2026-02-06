@@ -16,3 +16,4 @@
 - Added generated discovery and manifest files under `evm-cast-wallet/references/`.
 - Added automated tests for discovery, policy, wrapper execution, coverage, and skill validation.
 - Added ready-to-run request examples for read and broadcast execution flows.
+- Added env-only RPC URL behavior (no persistence) and explicit `RPC_URL_REQUIRED` guidance.

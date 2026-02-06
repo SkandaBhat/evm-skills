@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -80,3 +81,53 @@ def test_wrapper_exec_read_command():
     assert payload["status"] == "ok"
     assert payload["command_path"] == "address-zero"
 
+
+def test_wrapper_requires_rpc_url_for_rpc_commands():
+    manifest_path = ROOT / "references" / "command-manifest.json"
+    request = {
+        "command_path": "balance",
+        "args": ["0x0000000000000000000000000000000000000000"],
+        "context": {},
+        "timeout_seconds": 5,
+    }
+    cmd = [
+        sys.executable,
+        str(SCRIPTS / "evm_cast.py"),
+        "exec",
+        "--manifest",
+        str(manifest_path),
+        "--request-json",
+        json.dumps(request),
+    ]
+    env = os.environ.copy()
+    env.pop("ETH_RPC_URL", None)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
+    assert proc.returncode == 4
+    payload = json.loads(proc.stdout)
+    assert payload["error_code"] == "RPC_URL_REQUIRED"
+    assert "couldnt find an rpc url" in payload["error_message"]
+
+
+def test_wrapper_accepts_rpc_url_from_env_json():
+    manifest_path = ROOT / "references" / "command-manifest.json"
+    request = {
+        "command_path": "balance",
+        "args": ["0x0000000000000000000000000000000000000000"],
+        "context": {},
+        "env": {"ETH_RPC_URL": "http://127.0.0.1:1"},
+        "timeout_seconds": 2,
+    }
+    cmd = [
+        sys.executable,
+        str(SCRIPTS / "evm_cast.py"),
+        "exec",
+        "--manifest",
+        str(manifest_path),
+        "--request-json",
+        json.dumps(request),
+    ]
+    env = os.environ.copy()
+    env.pop("ETH_RPC_URL", None)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
+    payload = json.loads(proc.stdout)
+    assert payload["error_code"] != "RPC_URL_REQUIRED"

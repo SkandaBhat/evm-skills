@@ -22,6 +22,13 @@ Use this skill when the task requires EVM operations and `cast` is available.
 
 Always enforce policy before execution. The wrapper handles this automatically.
 
+## RPC URL behavior
+- This skill does not persist RPC URLs to disk.
+- Reuse RPC by setting `ETH_RPC_URL` in the execution environment, or by passing `--rpc-url` in command args.
+- If a command requires RPC and no URL is present, the wrapper returns:
+  - `error_code = RPC_URL_REQUIRED`
+  - message: `couldnt find an rpc url. give me an rpc url so i can add it to env.`
+
 ## High-value commands
 - Discovery and baseline:
   - `python3 scripts/discover_cast_tree.py --output references/discovered-cast-paths.json`

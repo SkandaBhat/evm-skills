@@ -32,3 +32,10 @@ Implemented a usable first version of skill package:
 
 ## Practical usage
 Agents should call `scripts/evm_cast.py exec` with JSON requests rather than invoking raw `cast` directly, so policy and normalized response handling are always applied.
+
+## RPC URL state decision
+- RPC URL handling is env-only for this skill.
+- No persistence to disk is implemented.
+- For RPC-required commands with no `ETH_RPC_URL` and no `--rpc-url`, wrapper returns:
+  - `error_code = RPC_URL_REQUIRED`
+  - `error_message = couldnt find an rpc url. give me an rpc url so i can add it to env.`

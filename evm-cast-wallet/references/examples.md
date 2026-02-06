@@ -15,6 +15,12 @@ Run:
 python3 scripts/evm_cast.py exec --request-file references/examples-read-request.json
 ```
 
+Session env reuse (no persistence):
+```bash
+export ETH_RPC_URL="https://your-rpc-url"
+python3 scripts/evm_cast.py exec --request-file references/examples-read-request.json
+```
+
 ## Broadcast command
 ```json
 {

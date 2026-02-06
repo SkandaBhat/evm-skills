@@ -22,6 +22,47 @@ from policy_eval import evaluate_policy, load_manifest  # noqa: E402
 
 
 DEFAULT_MANIFEST = (SCRIPT_DIR.parent / "references" / "command-manifest.json").resolve()
+RPC_REQUIRED_TOP_LEVEL = {
+    "access-list",
+    "admin",
+    "age",
+    "balance",
+    "base-fee",
+    "block",
+    "block-number",
+    "call",
+    "chain",
+    "chain-id",
+    "client",
+    "code",
+    "codehash",
+    "codesize",
+    "estimate",
+    "find-block",
+    "gas-price",
+    "implementation",
+    "logs",
+    "lookup-address",
+    "nonce",
+    "proof",
+    "publish",
+    "receipt",
+    "resolve-name",
+    "rpc",
+    "run",
+    "send",
+    "storage",
+    "storage-root",
+    "trace",
+    "tx",
+    "tx-pool",
+}
+RPC_REQUIRED_PATHS = {
+    "wallet sign-auth",
+}
+RPC_MISSING_MESSAGE = (
+    "couldnt find an rpc url. give me an rpc url so i can add it to env."
+)
 
 
 def _json_dump(payload: dict[str, Any], pretty: bool = True) -> str:
@@ -97,6 +138,37 @@ def _build_env(req: dict[str, Any]) -> dict[str, str]:
     return env
 
 
+def _command_requires_rpc(command_path: str) -> bool:
+    if command_path in RPC_REQUIRED_PATHS:
+        return True
+    head = command_path.split(" ", 1)[0]
+    return head in RPC_REQUIRED_TOP_LEVEL
+
+
+def _args_include_rpc_url(args: list[str]) -> bool:
+    for i, arg in enumerate(args):
+        if arg == "--flashbots":
+            return True
+        if arg == "--rpc-url":
+            if i + 1 < len(args) and args[i + 1]:
+                return True
+        if arg.startswith("--rpc-url="):
+            return True
+        if arg == "-r":
+            if i + 1 < len(args) and args[i + 1]:
+                return True
+    return False
+
+
+def _has_rpc_url_for_request(command_path: str, args: list[str], env: dict[str, str]) -> bool:
+    if not _command_requires_rpc(command_path):
+        return True
+    if _args_include_rpc_url(args):
+        return True
+    rpc_from_env = str(env.get("ETH_RPC_URL", "")).strip()
+    return bool(rpc_from_env)
+
+
 def cmd_exec(args: argparse.Namespace) -> int:
     manifest_path = Path(args.manifest).resolve()
     if not manifest_path.exists():
@@ -149,7 +221,25 @@ def cmd_exec(args: argparse.Namespace) -> int:
         return 4
 
     cast_binary = args.cast_binary
-    cmd = [cast_binary, *command_path.split(), *req.get("args", [])]
+    request_args = [str(a) for a in req.get("args", [])]
+    execution_env = _build_env(req)
+    if not _has_rpc_url_for_request(command_path, request_args, execution_env):
+        payload = _base_response(command_path)
+        payload.update(
+            {
+                "status": "denied",
+                "ok": False,
+                "error_code": "RPC_URL_REQUIRED",
+                "error_message": RPC_MISSING_MESSAGE,
+                "policy": policy,
+                "request": req,
+                "hint": "Set ETH_RPC_URL in env, or pass --rpc-url in args.",
+            }
+        )
+        print(_json_dump(payload, pretty=not args.compact))
+        return 4
+
+    cmd = [cast_binary, *command_path.split(), *request_args]
     timeout_seconds = float(req.get("timeout_seconds", 45))
     start = time.perf_counter()
     try:
@@ -158,7 +248,7 @@ def cmd_exec(args: argparse.Namespace) -> int:
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
-            env=_build_env(req),
+            env=execution_env,
             check=False,
         )
     except subprocess.TimeoutExpired as err:
