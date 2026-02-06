@@ -1,0 +1,13 @@
+{
+  "command_path": "send",
+  "args": [
+    "0x0000000000000000000000000000000000000000",
+    "--rpc-url",
+    "http://localhost:8545"
+  ],
+  "context": {
+    "allow_broadcast": true,
+    "confirmation_token": "approved-by-agent"
+  },
+  "timeout_seconds": 45
+}
