@@ -13,7 +13,7 @@ Deprecate and remove the cast-based skill package from this repo, and pivot to a
 - Removed `evm-cast-wallet/` package files.
 - Removed cast-specific baseline data and cast-only implementation plan docs.
 - Added JSON-RPC method inventory derived from `execution-apis`.
-- Added JSON-RPC-only implementation plan and new skill skeleton (`evm-jsonrpc-wallet/`).
+- Added JSON-RPC-only implementation plan and new skill skeleton (`evm/`).
 
 ## Source
 - User direction in task thread on 2026-02-06:

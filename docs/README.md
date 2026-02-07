@@ -22,6 +22,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `docs/learnings/2026-02-06-execution-apis-rpc-inventory.md`: Complete method inventory from `ethereum/execution-apis`.
 - `docs/learnings/2026-02-06-cast-deprecation-and-json-rpc-shift.md`: Decision log for removing cast and pivoting to JSON-RPC-only skill architecture.
 - `docs/learnings/2026-02-06-user-stories-and-validation.md`: User story catalog and validation model tied to inventory/manifest coverage.
+- `docs/learnings/2026-02-07-evm-wrapper-v0.1.md`: First packaged runtime wrapper implementation for the `evm` skill.
 - `docs/data/execution-api-rpc-methods-2026-02-06.json`: Machine-readable inventory of 69 RPC methods.
 
 ### Plans
@@ -29,13 +30,22 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `docs/plans/json-rpc-wrapper-architecture.md`: Detailed wrapper architecture (modules, contracts, policy, errors, testing).
 
 ### Skill Package
-- `evm-jsonrpc-wallet/SKILL.md`: JSON-RPC-only skill entrypoint.
-- `evm-jsonrpc-wallet/scripts/sync_execution_apis_inventory.py`: Inventory sync tooling from execution-apis checkout.
-- `evm-jsonrpc-wallet/references/rpc-method-inventory.json`: Source-of-truth method inventory for coverage tracking.
-- `evm-jsonrpc-wallet/references/method-manifest.json`: Tier/implementation mapping for all inventory methods.
-- `evm-jsonrpc-wallet/references/rpc-methods.md`: Human-readable method list by namespace.
-- `evm-jsonrpc-wallet/references/risk-tiers.md`: Initial risk and gating model for method classes.
-- `evm-jsonrpc-wallet/references/user-stories.json`: Machine-readable agent user stories.
-- `evm-jsonrpc-wallet/references/user-stories.md`: Human-readable user story catalog.
-- `evm-jsonrpc-wallet/scripts/build_method_manifest.py`: Regenerates method manifest from inventory.
-- `evm-jsonrpc-wallet/scripts/validate_user_stories.py`: Validates story schema, policy alignment, and coverage.
+- `evm/SKILL.md`: JSON-RPC-only skill entrypoint.
+- `evm/scripts/sync_execution_apis_inventory.py`: Inventory sync tooling from execution-apis checkout.
+- `evm/scripts/evm_rpc.py`: Runtime JSON-RPC wrapper entrypoint.
+- `evm/scripts/rpc_contract.py`: Request/response contract helpers.
+- `evm/scripts/method_registry.py`: Manifest registry loader.
+- `evm/scripts/policy_eval.py`: Policy gate evaluator.
+- `evm/scripts/rpc_transport.py`: JSON-RPC HTTP transport.
+- `evm/scripts/error_map.py`: Stable error codes/messages.
+- `evm/scripts/coverage_check.py`: Inventory/manifest coverage checker.
+- `evm/references/rpc-method-inventory.json`: Source-of-truth method inventory for coverage tracking.
+- `evm/references/method-manifest.json`: Tier/implementation mapping for all inventory methods.
+- `evm/references/rpc-methods.md`: Human-readable method list by namespace.
+- `evm/references/risk-tiers.md`: Initial risk and gating model for method classes.
+- `evm/references/user-stories.json`: Machine-readable agent user stories.
+- `evm/references/user-stories.md`: Human-readable user story catalog.
+- `evm/scripts/build_method_manifest.py`: Regenerates method manifest from inventory.
+- `evm/scripts/validate_user_stories.py`: Validates story schema, policy alignment, and coverage.
+- `evm/tests/test_evm_rpc_wrapper.py`: Wrapper runtime integration tests.
+- `evm/tests/test_user_story_validation.py`: Story validation tests.

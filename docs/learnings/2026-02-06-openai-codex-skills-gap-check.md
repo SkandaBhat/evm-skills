@@ -12,11 +12,11 @@ Checked `https://developers.openai.com/codex/skills/` and compared requirements/
 - Optional `agents/openai.yaml` supports UI metadata and dependency declarations (including MCP tools).
 
 ## Repo status vs Codex docs
-- `SKILL.md` requirement: satisfied (`evm-jsonrpc-wallet/SKILL.md`).
+- `SKILL.md` requirement: satisfied (`evm/SKILL.md`).
 - Progressive disclosure shape: satisfied (heavy details moved to `references/` and scripts).
-- Coverage/testing/tooling docs: satisfied (`docs/`, `evm-jsonrpc-wallet/scripts/`, `evm-jsonrpc-wallet/references/`).
+- Coverage/testing/tooling docs: satisfied (`docs/`, `evm/scripts/`, `evm/references/`).
 - Repo discovery path (`.agents/skills/...`): missing in current layout.
-  - Current skill lives at `evm-jsonrpc-wallet/` repository root.
+  - Current skill lives at `evm/` repository root.
   - This is installable by path, but not in the default repo scan location described by Codex docs.
 - Optional `agents/openai.yaml`: missing.
   - Not required for validity.
@@ -28,9 +28,9 @@ Checked `https://developers.openai.com/codex/skills/` and compared requirements/
 - If we want richer Codex app UX and dependency signaling, add `agents/openai.yaml` in the skill directory.
 
 ## Recommended follow-up changes
-1. Add `.agents/skills/evm-jsonrpc-wallet/` path in this repo.
+1. Add `.agents/skills/evm/` path in this repo.
    - Either move the skill there or add a symlink/wrapper structure that keeps existing tooling stable.
-2. Add `evm-jsonrpc-wallet/agents/openai.yaml` with:
+2. Add `evm/agents/openai.yaml` with:
    - `interface.default_prompt` tuned for JSON-RPC task routing.
    - Optional `interface.display_name` and `short_description`.
    - Dependencies only when we actually require MCP tools.

@@ -1,5 +1,14 @@
 # Docs Changelog
 
+## 2026-02-07
+- Renamed skill package path from `evm-jsonrpc-wallet/` to `evm/`.
+- Updated all docs/plans/learnings to the `evm/` package path.
+- Implemented packaged runtime wrapper `evm/scripts/evm_rpc.py` with policy-first JSON-RPC execution.
+- Added wrapper support modules (`rpc_contract`, `method_registry`, `policy_eval`, `rpc_transport`, `error_map`, `coverage_check`).
+- Added wrapper runtime tests (`evm/tests/test_evm_rpc_wrapper.py`).
+- Added runtime implementation learning note (`docs/learnings/2026-02-07-evm-wrapper-v0.1.md`).
+- Updated skill and plans to reflect v0.1 runtime availability and current milestone status.
+
 ## 2026-02-06
 - Initialized project documentation structure under `docs/`.
 - Added persistent docs maintenance rules (`docs/AGENTS.md`).
@@ -22,8 +31,8 @@
 - Added installed-session field findings, including reproducible Foundry proxy-detection panic and required read-only JSON-RPC fallback direction.
 - Removed `evm-cast-wallet` skill package and cast-only docs/plans.
 - Added JSON-RPC method inventory from `ethereum/execution-apis` (`69` methods: `eth=40`, `debug=5`, `engine=24`).
-- Added `evm-jsonrpc-wallet` skill skeleton (JSON-RPC-only, no cast dependency).
-- Added inventory sync script: `evm-jsonrpc-wallet/scripts/sync_execution_apis_inventory.py`.
+- Added `evm` skill skeleton (JSON-RPC-only, no cast dependency).
+- Added inventory sync script: `evm/scripts/sync_execution_apis_inventory.py`.
 - Added JSON-RPC-only implementation plan (`docs/plans/json-rpc-only-skill-plan.md`).
 - Added decision note documenting cast deprecation and JSON-RPC pivot.
 - Added a dedicated JSON-RPC wrapper architecture plan covering module boundaries, request/response contract, policy flow, error taxonomy, retries, and test strategy.

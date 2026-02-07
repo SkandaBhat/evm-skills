@@ -3,6 +3,15 @@
 ## Goal
 Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `ethereum/execution-apis`, without any `cast` dependency.
 
+## Status (2026-02-07)
+- Completed:
+  - Phase 1 (inventory/scaffolding)
+  - Phase 2 (core runtime wrapper in `evm/scripts/evm_rpc.py`)
+  - method manifest + story validation tooling
+- Remaining:
+  - deeper method-specific adapters for sensitive/operator paths
+  - CI wiring and release hardening
+
 ## Scope baseline
 - Source repository: <https://github.com/ethereum/execution-apis>
 - Snapshot commit: `585763b34564202d4611d318006ea1f3efb43616`
@@ -22,7 +31,7 @@ Detailed module-level architecture lives in:
 
 1. Method registry
    - Generated inventory from `execution-apis` YAML definitions.
-   - Canonical file: `evm-jsonrpc-wallet/references/rpc-method-inventory.json`.
+   - Canonical file: `evm/references/rpc-method-inventory.json`.
 2. RPC wrapper
    - Build `scripts/evm_rpc.py` with JSON request/response contract:
      - request: `method`, `params`, `id`, `context`, optional `env`.
@@ -55,7 +64,7 @@ Every method in inventory must have one of:
 
 ### Phase 1: Inventory and scaffolding
 1. Keep method inventory synced from `execution-apis`.
-2. Add `evm-jsonrpc-wallet/SKILL.md` and references.
+2. Add `evm/SKILL.md` and references.
 3. Add wrapper request/response schema docs.
 
 ### Phase 2: Core runtime
@@ -86,7 +95,7 @@ Every method in inventory must have one of:
    - fail CI if required story coverage threshold is not met
 
 ### Phase 5: Packaging and rollout
-1. Place skill under `.agents/skills/evm-jsonrpc-wallet` for Codex repo discovery.
+1. Place skill under `.agents/skills/evm` for Codex repo discovery.
 2. Keep path-install instructions for clients that install snapshots.
 3. Publish update workflow:
    - sync inventory

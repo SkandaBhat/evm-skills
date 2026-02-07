@@ -42,7 +42,7 @@ Implication:
 Implication:
 - Even in plugin ecosystems, update is typically explicit user/tool action, not universal background auto-update of installed skill bundles.
 
-## Practical conclusion for `evm-jsonrpc-wallet`
+## Practical conclusion for `evm`
 Use a predictable update model:
 1. Keep repo skill canonical and versioned.
 2. Support explicit update workflows (documented commands) rather than implicit remote auto-update assumptions.

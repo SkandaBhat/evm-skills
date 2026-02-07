@@ -1,11 +1,24 @@
 # JSON-RPC Wrapper Architecture Plan
 
 ## Objective
-Define a robust wrapper architecture for `evm-jsonrpc-wallet` that:
+Define a robust wrapper architecture for `evm` that:
 1. supports all methods in `execution-apis` inventory,
 2. enforces strict user-safe policy controls,
 3. remains deterministic and testable,
 4. does not depend on `cast`.
+
+## Status (2026-02-07)
+- Implemented modules:
+  - `evm/scripts/evm_rpc.py`
+  - `evm/scripts/rpc_contract.py`
+  - `evm/scripts/method_registry.py`
+  - `evm/scripts/policy_eval.py`
+  - `evm/scripts/rpc_transport.py`
+  - `evm/scripts/error_map.py`
+  - `evm/scripts/coverage_check.py`
+- Implemented tests:
+  - `evm/tests/test_evm_rpc_wrapper.py`
+  - `evm/tests/test_user_story_validation.py`
 
 ## Design principles
 1. Single responsibility per module.
@@ -23,7 +36,7 @@ Define a robust wrapper architecture for `evm-jsonrpc-wallet` that:
 4. No local key persistence in this wrapper.
 
 ## Proposed package layout
-`evm-jsonrpc-wallet/scripts/`
+`evm/scripts/`
 1. `evm_rpc.py`
    - CLI entrypoint.
    - Subcommands:
@@ -46,7 +59,7 @@ Define a robust wrapper architecture for `evm-jsonrpc-wallet` that:
    - Already present, keeps inventory fresh.
 
 ## Data files
-`evm-jsonrpc-wallet/references/`
+`evm/references/`
 1. `rpc-method-inventory.json`
    - Generated from `execution-apis`.
 2. `method-manifest.json` (new)
@@ -174,7 +187,7 @@ JSON-RPC remote errors remain available under `rpc_response.error`.
    - story schema and tier/context correctness
    - full method coverage from stories (when required)
    - canonical command:
-     - `python3 evm-jsonrpc-wallet/scripts/validate_user_stories.py --stories evm-jsonrpc-wallet/references/user-stories.json --inventory evm-jsonrpc-wallet/references/rpc-method-inventory.json --manifest evm-jsonrpc-wallet/references/method-manifest.json --require-full-coverage`
+     - `python3 evm/scripts/validate_user_stories.py --stories evm/references/user-stories.json --inventory evm/references/rpc-method-inventory.json --manifest evm/references/method-manifest.json --require-full-coverage`
 
 ## Milestones
 1. M1: Contracts + registry + policy + manifest + coverage checker.
