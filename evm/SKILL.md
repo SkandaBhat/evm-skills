@@ -54,6 +54,10 @@ Use this skill for EVM tasks through Ethereum JSON-RPC with a wrapper+cast hybri
   - convenience commands:
     - `ens resolve <name>`
     - `balance <name-or-address> --at <tag>`
+- analytics foundation (initial) is implemented:
+  - `analytics dex-swap-flow`
+  - `analytics factory-new-pools`
+  - reusable range resolver (`--last-blocks` / `--since`) and resumable scan checkpoints
 - R1 advanced capabilities (foundation + logs) are implemented:
   - `logs` command with chunked `eth_getLogs` workflows
   - heavy-read guard via `context.allow_heavy_read`
@@ -94,6 +98,10 @@ Use this skill for EVM tasks through Ethereum JSON-RPC with a wrapper+cast hybri
   - `python3 scripts/evm_rpc.py balance vitalik.eth --manifest references/method-manifest.json`
 - ENS convenience:
   - `python3 scripts/evm_rpc.py ens resolve vitalik.eth --manifest references/method-manifest.json`
+- Analytics (pool swap flow):
+  - `python3 scripts/evm_rpc.py analytics dex-swap-flow --pool 0x1111111111111111111111111111111111111111 --last-blocks 5000 --manifest references/method-manifest.json`
+- Analytics (factory new pools):
+  - `python3 scripts/evm_rpc.py analytics factory-new-pools --factory 0x1111111111111111111111111111111111111111 --protocol uniswap-v2 --since 24h --manifest references/method-manifest.json`
 - Extract result for piping:
   - `python3 scripts/evm_rpc.py exec --manifest references/method-manifest.json --request-json '{"method":"eth_blockNumber","params":[]}' --result-only`
   - `python3 scripts/evm_rpc.py chain --manifest references/method-manifest.json --request-json '{"steps":[{"id":"b","method":"eth_blockNumber","params":[]}]}' --select '$.outputs.b.result'`
@@ -101,6 +109,6 @@ Use this skill for EVM tasks through Ethereum JSON-RPC with a wrapper+cast hybri
   - `python3 scripts/coverage_check.py --inventory references/rpc-method-inventory.json --manifest references/method-manifest.json`
 
 ## References
-- Coverage plan: `docs/plans/json-rpc-only-skill-plan.md`
-- Method inventory learning note: `docs/learnings/2026-02-06-execution-apis-rpc-inventory.md`
+- Coverage/archive plan: `docs/archive/plans/json-rpc-only-skill-plan.md`
+- Method inventory learning note: `docs/archive/learnings/2026-02-06-execution-apis-rpc-inventory.md`
 - Risk model: `references/risk-tiers.md`

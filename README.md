@@ -9,7 +9,8 @@ This repo provides an `evm` skill with deterministic, policy-first commands for:
 4. ABI encode/decode,
 5. multicall-style aggregated reads,
 6. simulation preflight,
-7. trace negotiation.
+7. trace negotiation,
+8. high-level analytics commands (`analytics dex-swap-flow`, `analytics factory-new-pools`).
 
 ## Runtime Requirements
 1. `python3`
@@ -77,6 +78,18 @@ Trace with graceful fallback:
 ```text
 Using the evm skill trace command, trace this call.
 If trace is unsupported, return the TRACE_UNSUPPORTED payload clearly.
+```
+
+Searcher-style analytics:
+
+```text
+Using the evm skill analytics dex-swap-flow command, scan this Uniswap V2 pair over the last 5000 blocks.
+Return token0/token1 metadata, per-swap rows, and net pool flow summary.
+```
+
+```text
+Using the evm skill analytics factory-new-pools command, find new pools created by this factory over the last 24h.
+Return only pool address, token0, token1, and tx hash.
 ```
 
 ### 3) General prompt pattern

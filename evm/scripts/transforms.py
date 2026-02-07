@@ -6,132 +6,20 @@ import re
 from typing import Any
 
 from cast_adapter import cast_from_wei, cast_namehash
+from quantity import parse_nonnegative_quantity
 
 HEX_BYTES_RE = re.compile(r"^0x(?:[0-9a-fA-F]{2})*$")
-HEX_QUANTITY_RE = re.compile(r"^0x[0-9a-fA-F]+$")
-
-_MASK_64 = (1 << 64) - 1
-_KECCAK_ROUNDS = 24
-_KECCAK_RATE_BYTES = 136  # keccak-256 bitrate
-
-_ROTATION_OFFSETS = [
-    [0, 36, 3, 41, 18],
-    [1, 44, 10, 45, 2],
-    [62, 6, 43, 15, 61],
-    [28, 55, 25, 21, 56],
-    [27, 20, 39, 8, 14],
-]
-
-_ROUND_CONSTANTS = [
-    0x0000000000000001,
-    0x0000000000008082,
-    0x800000000000808A,
-    0x8000000080008000,
-    0x000000000000808B,
-    0x0000000080000001,
-    0x8000000080008081,
-    0x8000000000008009,
-    0x000000000000008A,
-    0x0000000000000088,
-    0x0000000080008009,
-    0x000000008000000A,
-    0x000000008000808B,
-    0x800000000000008B,
-    0x8000000000008089,
-    0x8000000000008003,
-    0x8000000000008002,
-    0x8000000000000080,
-    0x000000000000800A,
-    0x800000008000000A,
-    0x8000000080008081,
-    0x8000000000008080,
-    0x0000000080000001,
-    0x8000000080008008,
-]
-
-
-def _rotl64(value: int, shift: int) -> int:
-    shift %= 64
-    return ((value << shift) | (value >> (64 - shift))) & _MASK_64
-
-
-def _keccak_f1600(state: list[int]) -> None:
-    for round_idx in range(_KECCAK_ROUNDS):
-        c = [state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^ state[x + 20] for x in range(5)]
-        d = [c[(x - 1) % 5] ^ _rotl64(c[(x + 1) % 5], 1) for x in range(5)]
-        for x in range(5):
-            for y in range(5):
-                state[x + 5 * y] ^= d[x]
-
-        b = [0] * 25
-        for x in range(5):
-            for y in range(5):
-                b[y + 5 * ((2 * x + 3 * y) % 5)] = _rotl64(
-                    state[x + 5 * y], _ROTATION_OFFSETS[x][y]
-                )
-
-        for x in range(5):
-            for y in range(5):
-                state[x + 5 * y] = (
-                    b[x + 5 * y] ^ ((~b[(x + 1) % 5 + 5 * y]) & b[(x + 2) % 5 + 5 * y])
-                ) & _MASK_64
-
-        state[0] ^= _ROUND_CONSTANTS[round_idx]
-
-
-def keccak256(data: bytes) -> bytes:
-    state = [0] * 25
-    padded = bytearray(data)
-    padded.append(0x01)
-    while (len(padded) % _KECCAK_RATE_BYTES) != (_KECCAK_RATE_BYTES - 1):
-        padded.append(0)
-    padded.append(0x80)
-
-    for offset in range(0, len(padded), _KECCAK_RATE_BYTES):
-        block = padded[offset : offset + _KECCAK_RATE_BYTES]
-        for i in range(_KECCAK_RATE_BYTES // 8):
-            lane = int.from_bytes(block[i * 8 : (i + 1) * 8], "little")
-            state[i] ^= lane
-        _keccak_f1600(state)
-
-    output = bytearray()
-    while len(output) < 32:
-        for i in range(_KECCAK_RATE_BYTES // 8):
-            output.extend(state[i].to_bytes(8, "little"))
-        if len(output) >= 32:
-            break
-        _keccak_f1600(state)
-    return bytes(output[:32])
-
-
-def _parse_nonnegative_int(value: Any) -> tuple[bool, int, str]:
-    if isinstance(value, bool):
-        return False, 0, "value cannot be boolean"
-    if isinstance(value, int):
-        if value < 0:
-            return False, 0, "value must be non-negative"
-        return True, value, ""
-    if not isinstance(value, str):
-        return False, 0, "value must be int or string"
-    raw = value.strip()
-    if not raw:
-        return False, 0, "value cannot be empty"
-    if HEX_QUANTITY_RE.fullmatch(raw):
-        return True, int(raw, 16), ""
-    if raw.isdigit():
-        return True, int(raw, 10), ""
-    return False, 0, "value must be a decimal integer or 0x-prefixed hex quantity"
 
 
 def transform_hex_to_int(value: Any) -> tuple[bool, Any, str]:
-    ok, as_int, err = _parse_nonnegative_int(value)
+    ok, as_int, err = parse_nonnegative_quantity(value)
     if not ok:
         return False, None, f"hex_to_int: {err}"
     return True, as_int, ""
 
 
 def transform_wei_to_eth(value: Any) -> tuple[bool, Any, str]:
-    ok, wei, err = _parse_nonnegative_int(value)
+    ok, wei, err = parse_nonnegative_quantity(value)
     if not ok:
         return False, None, f"wei_to_eth: {err}"
     try:

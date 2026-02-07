@@ -47,6 +47,21 @@ from error_map import (  # noqa: E402
 )
 from adapters import validate_adapter_preflight  # noqa: E402
 from abi_codec import decode_log, event_topic0, run_abi_operation  # noqa: E402
+from analytics_aggregators import summarize_swap_rows  # noqa: E402
+from analytics_registry import (  # noqa: E402
+    ERC20_DECIMALS_SELECTOR,
+    UNISWAP_V2_PAIR_CREATED_EVENT,
+    UNISWAP_V2_PAIR_CREATED_TOPIC0,
+    UNISWAP_V2_SWAP_EVENT,
+    UNISWAP_V2_SWAP_TOPIC0,
+    UNISWAP_V2_TOKEN0_SELECTOR,
+    UNISWAP_V2_TOKEN1_SELECTOR,
+    UNISWAP_V3_POOL_CREATED_EVENT,
+    UNISWAP_V3_POOL_CREATED_TOPIC0,
+)
+from analytics_scanner import scan_logs  # noqa: E402
+from analytics_time_range import resolve_block_window  # noqa: E402
+from cast_adapter import cast_format_units  # noqa: E402
 from method_registry import load_manifest_by_method, load_json  # noqa: E402
 from multicall_engine import normalize_multicall_request, run_multicall  # noqa: E402
 from policy_eval import evaluate_policy  # noqa: E402
@@ -61,6 +76,7 @@ from rpc_transport import invoke_rpc  # noqa: E402
 from simulate_engine import normalize_simulation_request, run_simulation  # noqa: E402
 from trace_engine import normalize_trace_request, run_trace  # noqa: E402
 from transforms import apply_transform, ens_namehash  # noqa: E402
+from quantity import parse_nonnegative_quantity_str  # noqa: E402
 from logs_engine import (  # noqa: E402
     DEFAULT_HEAVY_READ_THRESHOLD,
     is_heavy_read,
@@ -403,6 +419,34 @@ def _load_manifest_or_error(manifest_path: Path) -> tuple[bool, dict[str, dict[s
     return True, load_manifest_by_method(manifest_path)
 
 
+def _require_manifest(args: argparse.Namespace) -> tuple[bool, dict[str, dict[str, Any]] | int]:
+    manifest_path = Path(args.manifest).resolve()
+    loaded, manifest_data = _load_manifest_or_error(manifest_path)
+    if not loaded:
+        print(_json_dump(manifest_data, pretty=not args.compact))
+        return False, 2
+    return True, manifest_data
+
+
+def _require_env_json(
+    *,
+    raw_env_json: str | None,
+    method: str,
+    compact: bool,
+) -> tuple[bool, dict[str, Any] | int]:
+    env_ok, env, env_err = _parse_env_json(raw_env_json)
+    if not env_ok:
+        _print_error(
+            method=method,
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=env_err,
+            pretty=not compact,
+        )
+        return False, 2
+    return True, env
+
+
 def run_rpc_request(
     *,
     req: dict[str, Any],
@@ -584,12 +628,10 @@ def _render_output(
 
 
 def cmd_exec(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
-    loaded, manifest_data = _load_manifest_or_error(manifest_path)
-    if not loaded:
-        print(_json_dump(manifest_data, pretty=not args.compact))
-        return 2
-    manifest_by_method = manifest_data
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
 
     try:
         req = parse_request_from_args(args)
@@ -684,14 +726,10 @@ def _apply_logs_event_filter(raw_request: dict[str, Any], event_raw: str | None)
 
 
 def _parse_nonnegative_hex_or_decimal(raw: str) -> tuple[bool, int]:
-    if raw.startswith("0x"):
-        try:
-            return True, int(raw, 16)
-        except Exception:  # noqa: BLE001
-            return False, 0
-    if raw.isdigit():
-        return True, int(raw, 10)
-    return False, 0
+    try:
+        return True, parse_nonnegative_quantity_str(raw)
+    except Exception:  # noqa: BLE001
+        return False, 0
 
 
 def _resolve_logs_last_range(
@@ -1007,12 +1045,10 @@ def _parse_json_request_from_args(args: argparse.Namespace, *, command: str) -> 
 
 
 def cmd_logs(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
-    loaded, manifest_data = _load_manifest_or_error(manifest_path)
-    if not loaded:
-        print(_json_dump(manifest_data, pretty=not args.compact))
-        return 2
-    manifest_by_method = manifest_data
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
 
     try:
         logs_req = _parse_logs_request_from_args(args)
@@ -1367,12 +1403,10 @@ def cmd_abi(args: argparse.Namespace) -> int:
 
 
 def cmd_multicall(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
-    loaded, manifest_data = _load_manifest_or_error(manifest_path)
-    if not loaded:
-        print(_json_dump(manifest_data, pretty=not args.compact))
-        return 2
-    manifest_by_method = manifest_data
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
 
     try:
         request = _parse_json_request_from_args(args, command="multicall")
@@ -1458,12 +1492,10 @@ def cmd_multicall(args: argparse.Namespace) -> int:
 
 
 def cmd_simulate(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
-    loaded, manifest_data = _load_manifest_or_error(manifest_path)
-    if not loaded:
-        print(_json_dump(manifest_data, pretty=not args.compact))
-        return 2
-    manifest_by_method = manifest_data
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
 
     try:
         request = _parse_json_request_from_args(args, command="simulate")
@@ -1545,12 +1577,10 @@ def cmd_simulate(args: argparse.Namespace) -> int:
 
 
 def cmd_trace(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
-    loaded, manifest_data = _load_manifest_or_error(manifest_path)
-    if not loaded:
-        print(_json_dump(manifest_data, pretty=not args.compact))
-        return 2
-    manifest_by_method = manifest_data
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
 
     try:
         request = _parse_json_request_from_args(args, command="trace")
@@ -2039,12 +2069,10 @@ def run_chain_request(
 
 
 def _cmd_chain_like(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
-    loaded, manifest_data = _load_manifest_or_error(manifest_path)
-    if not loaded:
-        print(_json_dump(manifest_data, pretty=not args.compact))
-        return 2
-    manifest_by_method = manifest_data
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
 
     try:
         chain_req = _parse_chain_request_from_args(args)
@@ -2100,6 +2128,577 @@ def _wrap_stage_failure(command_method: str, stage: str, cause: dict[str, Any]) 
     )
     payload["cause"] = cause
     return payload
+
+
+def _trim_decimal_string(value: str) -> str:
+    text = str(value).strip()
+    if "." not in text:
+        return text
+    whole, frac = text.split(".", 1)
+    frac = frac.rstrip("0")
+    return whole if not frac else f"{whole}.{frac}"
+
+
+def _make_analytics_executor(
+    *,
+    manifest_by_method: dict[str, dict[str, Any]],
+    default_context: dict[str, Any],
+    default_env: dict[str, Any],
+    default_timeout_seconds: float,
+) -> Any:
+    def execute(req: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        merged = dict(req)
+        req_ctx = merged.get("context")
+        context_out = dict(default_context)
+        if isinstance(req_ctx, dict):
+            context_out.update(req_ctx)
+        merged["context"] = context_out
+
+        req_env = merged.get("env")
+        env_out = dict(default_env)
+        if isinstance(req_env, dict):
+            env_out.update(req_env)
+        if env_out:
+            merged["env"] = env_out
+        else:
+            merged.pop("env", None)
+
+        if "timeout_seconds" not in merged:
+            merged["timeout_seconds"] = float(default_timeout_seconds)
+        return run_rpc_request(req=merged, manifest_by_method=manifest_by_method)
+
+    return execute
+
+
+def _analytics_hex_to_int(value: Any) -> tuple[bool, int, str]:
+    if not isinstance(value, str):
+        return False, 0, "expected hex quantity string"
+    try:
+        if value.startswith("0x"):
+            return True, int(value, 16), ""
+        return True, int(value, 10), ""
+    except Exception:  # noqa: BLE001
+        return False, 0, f"invalid quantity: {value}"
+
+
+def _analytics_eth_call_result(
+    *,
+    to: str,
+    data: str,
+    block_tag: str,
+    execute_rpc: Any,
+) -> tuple[int, dict[str, Any] | None, str | None]:
+    req = {
+        "method": "eth_call",
+        "params": [{"to": to, "data": data}, block_tag],
+    }
+    rc, payload = execute_rpc(req)
+    if rc != 0:
+        return rc, payload, None
+    result = payload.get("result")
+    if not isinstance(result, str):
+        return 2, _build_error_payload(
+            method="analytics",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="eth_call returned non-string result",
+        ), None
+    return 0, None, result
+
+
+def _analytics_word_to_address(word_hex: str) -> tuple[bool, str, str]:
+    ok, value, err = apply_transform("slice_last_20_bytes_to_address", word_hex)
+    if not ok or not isinstance(value, str):
+        return False, "", err or "failed to decode address"
+    return True, value, ""
+
+
+def _analytics_fetch_pool_metadata(
+    *,
+    pool: str,
+    block_tag: str,
+    execute_rpc: Any,
+) -> tuple[int, dict[str, Any]]:
+    rc0, cause0, token0_raw = _analytics_eth_call_result(
+        to=pool,
+        data=UNISWAP_V2_TOKEN0_SELECTOR,
+        block_tag=block_tag,
+        execute_rpc=execute_rpc,
+    )
+    if rc0 != 0 or token0_raw is None:
+        return rc0, _wrap_stage_failure("analytics.dex_swap_flow", "token0()", cause0 or {})
+    rc1, cause1, token1_raw = _analytics_eth_call_result(
+        to=pool,
+        data=UNISWAP_V2_TOKEN1_SELECTOR,
+        block_tag=block_tag,
+        execute_rpc=execute_rpc,
+    )
+    if rc1 != 0 or token1_raw is None:
+        return rc1, _wrap_stage_failure("analytics.dex_swap_flow", "token1()", cause1 or {})
+
+    ok0, token0, err0 = _analytics_word_to_address(token0_raw)
+    if not ok0:
+        return 2, _build_error_payload(
+            method="analytics.dex_swap_flow",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=f"token0 decode failed: {err0}",
+        )
+    ok1, token1, err1 = _analytics_word_to_address(token1_raw)
+    if not ok1:
+        return 2, _build_error_payload(
+            method="analytics.dex_swap_flow",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=f"token1 decode failed: {err1}",
+        )
+
+    def read_decimals(token: str) -> tuple[int, dict[str, Any] | None, int | None]:
+        rc, cause, raw = _analytics_eth_call_result(
+            to=token,
+            data=ERC20_DECIMALS_SELECTOR,
+            block_tag=block_tag,
+            execute_rpc=execute_rpc,
+        )
+        if rc != 0 or raw is None:
+            return rc, cause, None
+        ok, val, err = _analytics_hex_to_int(raw)
+        if not ok:
+            return 2, _build_error_payload(
+                method="analytics.dex_swap_flow",
+                status="error",
+                code=ERR_INVALID_REQUEST,
+                message=f"decimals decode failed for {token}: {err}",
+            ), None
+        return 0, None, int(val)
+
+    rcd0, caused0, decimals0 = read_decimals(token0)
+    if rcd0 != 0 or decimals0 is None:
+        return rcd0, _wrap_stage_failure(
+            "analytics.dex_swap_flow",
+            f"decimals() token0 {token0}",
+            caused0 or {},
+        )
+    rcd1, caused1, decimals1 = read_decimals(token1)
+    if rcd1 != 0 or decimals1 is None:
+        return rcd1, _wrap_stage_failure(
+            "analytics.dex_swap_flow",
+            f"decimals() token1 {token1}",
+            caused1 or {},
+        )
+
+    return 0, {
+        "token0": token0.lower(),
+        "token1": token1.lower(),
+        "decimals0": decimals0,
+        "decimals1": decimals1,
+    }
+
+
+def _format_units_or_raw(raw_value: str, decimals: int) -> str:
+    try:
+        return _trim_decimal_string(cast_format_units(raw_value, decimals))
+    except Exception:  # noqa: BLE001
+        return raw_value
+
+
+def cmd_analytics_dex_swap_flow(args: argparse.Namespace) -> int:
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
+
+    ok_env, env_or_rc = _require_env_json(
+        raw_env_json=args.env_json,
+        method="analytics.dex_swap_flow",
+        compact=bool(args.compact),
+    )
+    if not ok_env:
+        return int(env_or_rc)
+    env = env_or_rc
+
+    pool = str(args.pool).strip().lower()
+    if not ADDRESS_RE.fullmatch(pool):
+        _print_error(
+            method="analytics.dex_swap_flow",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="pool must be a 20-byte hex address",
+            pretty=not args.compact,
+        )
+        return 2
+
+    context = {
+        "allow_heavy_read": bool(args.allow_heavy_read),
+    }
+    execute_rpc = _make_analytics_executor(
+        manifest_by_method=manifest_by_method,
+        default_context=context,
+        default_env=env,
+        default_timeout_seconds=float(args.timeout_seconds),
+    )
+
+    range_rc, range_payload = resolve_block_window(
+        execute_rpc=execute_rpc,
+        context=context,
+        env=env,
+        timeout_seconds=float(args.timeout_seconds),
+        last_blocks=args.last_blocks,
+        since=args.since,
+    )
+    if range_rc != 0:
+        payload = _build_error_payload(
+            method="analytics.dex_swap_flow",
+            status="error",
+            code=str(range_payload.get("error_code", ERR_INVALID_REQUEST)),
+            message=str(range_payload.get("error_message", "failed to resolve range")),
+        )
+        if "cause" in range_payload:
+            payload["cause"] = range_payload["cause"]
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return range_rc
+
+    from_block = int(range_payload["from_block"])
+    to_block = int(range_payload["to_block"])
+    to_block_tag = hex(to_block)
+
+    meta_rc, meta_payload = _analytics_fetch_pool_metadata(
+        pool=pool,
+        block_tag=to_block_tag,
+        execute_rpc=execute_rpc,
+    )
+    if meta_rc != 0:
+        render_rc = _render_output(
+            payload=meta_payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return meta_rc
+
+    scan_rc, scan_payload = scan_logs(
+        execute_rpc=execute_rpc,
+        logs_filter={
+            "address": pool,
+            "topics": [UNISWAP_V2_SWAP_TOPIC0],
+            "fromBlock": from_block,
+            "toBlock": to_block,
+        },
+        context=context,
+        env=env,
+        timeout_seconds=float(args.timeout_seconds),
+        chunk_size=int(args.chunk_size),
+        max_chunks=int(args.max_chunks),
+        max_logs=int(args.max_logs),
+        adaptive_split=not bool(args.no_adaptive_split),
+        allow_heavy_read=bool(args.allow_heavy_read),
+        checkpoint_file=args.checkpoint_file,
+        filter_signature={"command": "dex-swap-flow", "pool": pool},
+    )
+    if scan_rc != 0 or not bool(scan_payload.get("ok", False)):
+        payload = _build_error_payload(
+            method="analytics.dex_swap_flow",
+            status="error",
+            code=str(scan_payload.get("error_code", ERR_INTERNAL)),
+            message=str(scan_payload.get("error_message", "log scan failed")),
+        )
+        payload["scan"] = scan_payload
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return scan_rc
+
+    token0 = str(meta_payload["token0"])
+    token1 = str(meta_payload["token1"])
+    decimals0 = int(meta_payload["decimals0"])
+    decimals1 = int(meta_payload["decimals1"])
+
+    rows: list[dict[str, Any]] = []
+    decode_failures = 0
+    for item in list(scan_payload.get("result", [])):
+        if not isinstance(item, dict):
+            decode_failures += 1
+            continue
+        try:
+            decoded = decode_log(
+                UNISWAP_V2_SWAP_EVENT,
+                list(item.get("topics", [])),
+                str(item.get("data", "0x")),
+                anonymous=False,
+            )
+            args_out = decoded.get("args", [])
+            row = {
+                "block_number": item.get("blockNumber"),
+                "tx_hash": item.get("transactionHash"),
+                "log_index": item.get("logIndex"),
+                "sender": str(args_out[0].get("value")).lower(),
+                "to": str(args_out[5].get("value")).lower(),
+                "amount0_in_raw": str(args_out[1].get("value")),
+                "amount1_in_raw": str(args_out[2].get("value")),
+                "amount0_out_raw": str(args_out[3].get("value")),
+                "amount1_out_raw": str(args_out[4].get("value")),
+            }
+            amount0_net = int(row["amount0_in_raw"]) - int(row["amount0_out_raw"])
+            amount1_net = int(row["amount1_in_raw"]) - int(row["amount1_out_raw"])
+            row["pool_token0_net_raw"] = str(amount0_net)
+            row["pool_token1_net_raw"] = str(amount1_net)
+            row["pool_token0_net"] = _format_units_or_raw(str(amount0_net), decimals0)
+            row["pool_token1_net"] = _format_units_or_raw(str(amount1_net), decimals1)
+            row["amount0_in"] = _format_units_or_raw(row["amount0_in_raw"], decimals0)
+            row["amount0_out"] = _format_units_or_raw(row["amount0_out_raw"], decimals0)
+            row["amount1_in"] = _format_units_or_raw(row["amount1_in_raw"], decimals1)
+            row["amount1_out"] = _format_units_or_raw(row["amount1_out_raw"], decimals1)
+            rows.append(row)
+        except Exception:
+            decode_failures += 1
+
+    if args.limit is not None:
+        rows = rows[: int(args.limit)]
+
+    summary = summarize_swap_rows(rows)
+    summary["decode_failures"] = decode_failures
+    summary["token0_pool_net"] = _format_units_or_raw(summary["token0_pool_net_raw"], decimals0)
+    summary["token1_pool_net"] = _format_units_or_raw(summary["token1_pool_net_raw"], decimals1)
+    summary["token0_volume"] = _format_units_or_raw(summary["token0_volume_raw"], decimals0)
+    summary["token1_volume"] = _format_units_or_raw(summary["token1_volume_raw"], decimals1)
+
+    result = {
+        "pool": pool,
+        "token0": token0,
+        "token1": token1,
+        "token0_decimals": decimals0,
+        "token1_decimals": decimals1,
+        "range": range_payload,
+        "rows": rows,
+        "summary": summary,
+        "scan_summary": scan_payload.get("summary", {}),
+    }
+    if "checkpoint" in scan_payload:
+        result["checkpoint"] = scan_payload["checkpoint"]
+
+    payload = {
+        "timestamp_utc": _timestamp(),
+        "method": "analytics.dex_swap_flow",
+        "status": "ok",
+        "ok": True,
+        "error_code": None,
+        "error_message": None,
+        "result": result,
+    }
+    render_rc = _render_output(
+        payload=payload,
+        compact=args.compact,
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field="result",
+    )
+    if render_rc != 0:
+        return render_rc
+    return 0
+
+
+def cmd_analytics_factory_new_pools(args: argparse.Namespace) -> int:
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
+
+    ok_env, env_or_rc = _require_env_json(
+        raw_env_json=args.env_json,
+        method="analytics.factory_new_pools",
+        compact=bool(args.compact),
+    )
+    if not ok_env:
+        return int(env_or_rc)
+    env = env_or_rc
+
+    factory = str(args.factory).strip().lower()
+    if not ADDRESS_RE.fullmatch(factory):
+        _print_error(
+            method="analytics.factory_new_pools",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="factory must be a 20-byte hex address",
+            pretty=not args.compact,
+        )
+        return 2
+
+    context = {
+        "allow_heavy_read": bool(args.allow_heavy_read),
+    }
+    execute_rpc = _make_analytics_executor(
+        manifest_by_method=manifest_by_method,
+        default_context=context,
+        default_env=env,
+        default_timeout_seconds=float(args.timeout_seconds),
+    )
+
+    range_rc, range_payload = resolve_block_window(
+        execute_rpc=execute_rpc,
+        context=context,
+        env=env,
+        timeout_seconds=float(args.timeout_seconds),
+        last_blocks=args.last_blocks,
+        since=args.since,
+    )
+    if range_rc != 0:
+        payload = _build_error_payload(
+            method="analytics.factory_new_pools",
+            status="error",
+            code=str(range_payload.get("error_code", ERR_INVALID_REQUEST)),
+            message=str(range_payload.get("error_message", "failed to resolve range")),
+        )
+        if "cause" in range_payload:
+            payload["cause"] = range_payload["cause"]
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return range_rc
+
+    protocol = str(args.protocol).strip().lower()
+    if protocol == "uniswap-v2":
+        event_decl = UNISWAP_V2_PAIR_CREATED_EVENT
+        topic0 = UNISWAP_V2_PAIR_CREATED_TOPIC0
+    else:
+        event_decl = UNISWAP_V3_POOL_CREATED_EVENT
+        topic0 = UNISWAP_V3_POOL_CREATED_TOPIC0
+
+    scan_rc, scan_payload = scan_logs(
+        execute_rpc=execute_rpc,
+        logs_filter={
+            "address": factory,
+            "topics": [topic0],
+            "fromBlock": int(range_payload["from_block"]),
+            "toBlock": int(range_payload["to_block"]),
+        },
+        context=context,
+        env=env,
+        timeout_seconds=float(args.timeout_seconds),
+        chunk_size=int(args.chunk_size),
+        max_chunks=int(args.max_chunks),
+        max_logs=int(args.max_logs),
+        adaptive_split=not bool(args.no_adaptive_split),
+        allow_heavy_read=bool(args.allow_heavy_read),
+        checkpoint_file=args.checkpoint_file,
+        filter_signature={"command": "factory-new-pools", "factory": factory, "protocol": protocol},
+    )
+    if scan_rc != 0 or not bool(scan_payload.get("ok", False)):
+        payload = _build_error_payload(
+            method="analytics.factory_new_pools",
+            status="error",
+            code=str(scan_payload.get("error_code", ERR_INTERNAL)),
+            message=str(scan_payload.get("error_message", "log scan failed")),
+        )
+        payload["scan"] = scan_payload
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return scan_rc
+
+    rows: list[dict[str, Any]] = []
+    decode_failures = 0
+    for item in list(scan_payload.get("result", [])):
+        if not isinstance(item, dict):
+            decode_failures += 1
+            continue
+        try:
+            decoded = decode_log(
+                event_decl,
+                list(item.get("topics", [])),
+                str(item.get("data", "0x")),
+                anonymous=False,
+            )
+            args_out = decoded.get("args", [])
+            if protocol == "uniswap-v2":
+                row = {
+                    "block_number": item.get("blockNumber"),
+                    "tx_hash": item.get("transactionHash"),
+                    "log_index": item.get("logIndex"),
+                    "token0": str(args_out[0].get("value")).lower(),
+                    "token1": str(args_out[1].get("value")).lower(),
+                    "pool": str(args_out[2].get("value")).lower(),
+                    "pair_index_raw": str(args_out[3].get("value")),
+                }
+            else:
+                row = {
+                    "block_number": item.get("blockNumber"),
+                    "tx_hash": item.get("transactionHash"),
+                    "log_index": item.get("logIndex"),
+                    "token0": str(args_out[0].get("value")).lower(),
+                    "token1": str(args_out[1].get("value")).lower(),
+                    "fee_raw": str(args_out[2].get("value")),
+                    "tick_spacing_raw": str(args_out[3].get("value")),
+                    "pool": str(args_out[4].get("value")).lower(),
+                }
+            rows.append(row)
+        except Exception:
+            decode_failures += 1
+
+    if args.limit is not None:
+        rows = rows[: int(args.limit)]
+
+    result = {
+        "factory": factory,
+        "protocol": protocol,
+        "range": range_payload,
+        "rows": rows,
+        "summary": {
+            "events": len(rows),
+            "decode_failures": decode_failures,
+        },
+        "scan_summary": scan_payload.get("summary", {}),
+    }
+    if "checkpoint" in scan_payload:
+        result["checkpoint"] = scan_payload["checkpoint"]
+
+    payload = {
+        "timestamp_utc": _timestamp(),
+        "method": "analytics.factory_new_pools",
+        "status": "ok",
+        "ok": True,
+        "error_code": None,
+        "error_message": None,
+        "result": result,
+    }
+    render_rc = _render_output(
+        payload=payload,
+        compact=args.compact,
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field="result",
+    )
+    if render_rc != 0:
+        return render_rc
+    return 0
 
 
 def _eth_call_req(
@@ -2226,23 +2825,19 @@ def _resolve_ens_address(
 
 
 def cmd_ens_resolve(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
-    loaded, manifest_data = _load_manifest_or_error(manifest_path)
-    if not loaded:
-        print(_json_dump(manifest_data, pretty=not args.compact))
-        return 2
-    manifest_by_method = manifest_data
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
 
-    env_ok, env, env_err = _parse_env_json(args.env_json)
-    if not env_ok:
-        _print_error(
-            method="ens_resolve",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=env_err,
-            pretty=not args.compact,
-        )
-        return 2
+    ok_env, env_or_rc = _require_env_json(
+        raw_env_json=args.env_json,
+        method="ens_resolve",
+        compact=bool(args.compact),
+    )
+    if not ok_env:
+        return int(env_or_rc)
+    env = env_or_rc
 
     exit_code, payload, _ = _resolve_ens_address(
         name=args.name,
@@ -2264,23 +2859,19 @@ def cmd_ens_resolve(args: argparse.Namespace) -> int:
 
 
 def cmd_balance(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
-    loaded, manifest_data = _load_manifest_or_error(manifest_path)
-    if not loaded:
-        print(_json_dump(manifest_data, pretty=not args.compact))
-        return 2
-    manifest_by_method = manifest_data
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
 
-    env_ok, env, env_err = _parse_env_json(args.env_json)
-    if not env_ok:
-        _print_error(
-            method="balance",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=env_err,
-            pretty=not args.compact,
-        )
-        return 2
+    ok_env, env_or_rc = _require_env_json(
+        raw_env_json=args.env_json,
+        method="balance",
+        compact=bool(args.compact),
+    )
+    if not ok_env:
+        return int(env_or_rc)
+    env = env_or_rc
 
     target = str(args.target).strip()
     if not target:
@@ -2556,6 +3147,54 @@ def build_parser() -> argparse.ArgumentParser:
     balance_parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     _add_output_args(balance_parser)
     balance_parser.set_defaults(func=cmd_balance)
+
+    analytics_parser = sub.add_parser("analytics", help="High-level analytics workflows")
+    analytics_sub = analytics_parser.add_subparsers(dest="analytics_command", required=True)
+
+    swap_flow_parser = analytics_sub.add_parser(
+        "dex-swap-flow",
+        help="Scan Uniswap V2 Swap logs for one pool and compute net flow",
+    )
+    swap_flow_parser.add_argument("--pool", required=True, help="Uniswap V2 pair address")
+    swap_flow_parser.add_argument("--last-blocks", type=int, help="scan latest N blocks")
+    swap_flow_parser.add_argument("--since", help="time window like 30m, 24h, 7d")
+    swap_flow_parser.add_argument("--chunk-size", type=int, default=2000)
+    swap_flow_parser.add_argument("--max-chunks", type=int, default=200)
+    swap_flow_parser.add_argument("--max-logs", type=int, default=10000)
+    swap_flow_parser.add_argument("--limit", type=int, help="cap decoded rows")
+    swap_flow_parser.add_argument("--no-adaptive-split", action="store_true")
+    swap_flow_parser.add_argument("--allow-heavy-read", action="store_true")
+    swap_flow_parser.add_argument("--checkpoint-file", help="json checkpoint path for resumable scans")
+    swap_flow_parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")
+    swap_flow_parser.add_argument("--env-json", help="runtime env object as JSON")
+    swap_flow_parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    _add_output_args(swap_flow_parser)
+    swap_flow_parser.set_defaults(func=cmd_analytics_dex_swap_flow)
+
+    new_pools_parser = analytics_sub.add_parser(
+        "factory-new-pools",
+        help="Decode factory PairCreated/PoolCreated logs",
+    )
+    new_pools_parser.add_argument("--factory", required=True, help="factory contract address")
+    new_pools_parser.add_argument(
+        "--protocol",
+        choices=("uniswap-v2", "uniswap-v3"),
+        default="uniswap-v2",
+    )
+    new_pools_parser.add_argument("--last-blocks", type=int, help="scan latest N blocks")
+    new_pools_parser.add_argument("--since", help="time window like 30m, 24h, 7d")
+    new_pools_parser.add_argument("--chunk-size", type=int, default=2000)
+    new_pools_parser.add_argument("--max-chunks", type=int, default=200)
+    new_pools_parser.add_argument("--max-logs", type=int, default=10000)
+    new_pools_parser.add_argument("--limit", type=int, help="cap decoded rows")
+    new_pools_parser.add_argument("--no-adaptive-split", action="store_true")
+    new_pools_parser.add_argument("--allow-heavy-read", action="store_true")
+    new_pools_parser.add_argument("--checkpoint-file", help="json checkpoint path for resumable scans")
+    new_pools_parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")
+    new_pools_parser.add_argument("--env-json", help="runtime env object as JSON")
+    new_pools_parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    _add_output_args(new_pools_parser)
+    new_pools_parser.set_defaults(func=cmd_analytics_factory_new_pools)
 
     list_parser = sub.add_parser("supported-methods", help="List enabled methods from manifest")
     list_parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")

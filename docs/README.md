@@ -15,28 +15,21 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `docs/CHANGELOG.md`: Dated log of documentation updates.
 - `README.md`: Repository-level getting-started and human-to-agent prompt templates.
 
-### Learnings
-- `docs/learnings/2026-02-06-agent-skills-spec.md`: Agent Skills spec and validation requirements.
-- `docs/learnings/2026-02-06-openai-codex-skills-gap-check.md`: Gap check against OpenAI Codex skills docs and repo alignment notes.
-- `docs/learnings/2026-02-06-skill-update-patterns-research.md`: Cross-ecosystem research on skill update/autoupdate patterns.
-- `docs/learnings/2026-02-06-execution-apis-rpc-inventory.md`: Complete method inventory from `ethereum/execution-apis`.
-- `docs/learnings/2026-02-06-user-stories-and-validation.md`: User story catalog and validation model tied to inventory/manifest coverage.
-- `docs/learnings/2026-02-07-evm-wrapper-v0.1.md`: First packaged runtime wrapper implementation for the `evm` skill.
-- `docs/learnings/2026-02-07-v0.2-adapter-hardening.md`: Adapter preflight validation and broadcast error mapping hardening.
-- `docs/learnings/2026-02-07-chain-usability-expansion.md`: Chain/batch runtime expansion, output selectors, transforms, and ENS/balance convenience commands.
-- `docs/learnings/2026-02-07-r1-foundation-and-logs.md`: R1 rollout with heavy-read policy context and chunked `eth_getLogs` engine.
-- `docs/learnings/2026-02-07-r2-r3-abi-multicall-simulate-trace.md`: R2/R3 rollout with ABI helpers, multicall, simulation preflight, and trace command support.
+### Active learnings
 - `docs/learnings/2026-02-07-cast-hybrid-runtime.md`: Cast codebase findings and wrapper/cast delegation boundary.
+- `docs/learnings/2026-02-07-analytics-foundation-v0.1.md`: Initial analytics command rollout and shared analytics module foundation.
+- `docs/learnings/2026-02-07-simplification-pass.md`: Post-audit simplification pass (shared parsers/prelude helpers, removed custom keccak implementation).
 
 ### Data snapshots
 - `docs/data/execution-api-rpc-methods-2026-02-06.json`: Machine-readable inventory of 69 RPC methods.
 
-### Plans
-- `docs/plans/json-rpc-only-skill-plan.md`: End-to-end implementation plan for JSON-RPC method coverage.
-- `docs/plans/json-rpc-wrapper-architecture.md`: Detailed wrapper architecture (modules, contracts, policy, errors, testing).
-- `docs/plans/chain-usability-expansion.md`: Detailed plan for multi-step chain execution and agent usability improvements.
-- `docs/plans/advanced-json-rpc-capabilities-plan.md`: Detailed plan for logs engine, ABI helpers, multicall, simulation, trace support, and provenance.
+### Active plans
 - `docs/plans/cast-hybrid-architecture.md`: Target architecture for cast-backed low-level execution with wrapper-owned policy/safety controls.
+- `docs/plans/analytics-commands-plan.md`: Roadmap for the 12 searcher-focused analytics commands and shared foundation.
+
+### Archive
+- `docs/archive/learnings/`: Historical learning notes from earlier milestones.
+- `docs/archive/plans/`: Historical superseded plans kept for provenance.
 
 ### Skill Package
 - `evm/SKILL.md`: Skill entrypoint and usage rules.
@@ -46,6 +39,10 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `evm/scripts/policy_eval.py`: Policy gate evaluator.
 - `evm/scripts/adapters.py`: Method-specific preflight validations for adapter methods.
 - `evm/scripts/cast_adapter.py`: `cast` CLI adapter for RPC and low-level utility delegation.
+- `evm/scripts/analytics_registry.py`: Event/topic/selector registry for analytics commands.
+- `evm/scripts/analytics_time_range.py`: `--last-blocks` / `--since` window resolution helpers.
+- `evm/scripts/analytics_scanner.py`: Reusable chunked/resumable log scan wrapper.
+- `evm/scripts/analytics_aggregators.py`: Shared analytics aggregators.
 - `evm/scripts/transforms.py`: Local transform helpers and ENS namehash support.
 - `evm/scripts/logs_engine.py`: Chunked log querying, adaptive split, and deterministic dedupe helpers.
 - `evm/scripts/abi_codec.py`: ABI encode/decode utilities for call data, outputs, and logs.
@@ -64,5 +61,11 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `evm/references/risk-tiers.md`: Risk and gating model for method classes.
 - `evm/references/user-stories.json`: Machine-readable agent user stories.
 - `evm/references/user-stories.md`: Human-readable user story catalog.
-- `evm/tests/test_evm_rpc_wrapper.py`: Wrapper runtime integration tests.
+- `evm/tests/_evm_rpc_helpers.py`: Shared integration-test harness for RPC wrapper tests.
+- `evm/tests/test_exec_policy.py`: Policy/exec behavior tests.
+- `evm/tests/test_chain.py`: Chain/batch workflow tests.
+- `evm/tests/test_logs.py`: Logs command behavior tests.
+- `evm/tests/test_analytics.py`: Analytics command tests.
+- `evm/tests/test_abi_multicall_sim_trace.py`: ABI, multicall, simulate, and trace tests.
+- `evm/tests/test_convenience.py`: ENS/balance convenience command tests.
 - `evm/tests/test_user_story_validation.py`: Story validation tests.

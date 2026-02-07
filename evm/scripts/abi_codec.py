@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from cast_adapter import cast_calldata, cast_decode_output, cast_event_topic0, cast_function_selector
-from transforms import keccak256
 
 HEX_RE = re.compile(r"^0x[0-9a-fA-F]*$")
 ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -418,7 +417,7 @@ def decode_log(
         raise ValueError("topics must be an array of 0x-prefixed hex strings")
 
     event_name, arg_types, indexed_flags, names, canonical = parse_event_declaration(event_declaration)
-    expected_topic0 = f"0x{keccak256(canonical.encode('utf-8')).hex()}"
+    expected_topic0 = cast_event_topic0(canonical)
 
     topic_cursor = 0
     if not anonymous:

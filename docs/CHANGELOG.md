@@ -1,6 +1,37 @@
 # Docs Changelog
 
 ## 2026-02-07
+- Simplified test layout:
+  - split monolithic `evm/tests/test_evm_rpc_wrapper.py` into focused suites:
+    - `evm/tests/test_exec_policy.py`
+    - `evm/tests/test_chain.py`
+    - `evm/tests/test_logs.py`
+    - `evm/tests/test_analytics.py`
+    - `evm/tests/test_abi_multicall_sim_trace.py`
+    - `evm/tests/test_convenience.py`
+  - added shared harness `evm/tests/_evm_rpc_helpers.py`
+- Simplified docs layout:
+  - moved superseded learnings to `docs/archive/learnings/`
+  - moved superseded plans to `docs/archive/plans/`
+  - updated active docs index in `docs/README.md`
+- Simplified runtime internals after repository audit:
+  - removed custom keccak implementation from `evm/scripts/transforms.py`
+  - added shared quantity parser module (`evm/scripts/quantity.py`)
+  - switched `abi_codec.decode_log` topic derivation to cast-backed helper path
+  - added command prelude helpers (`_require_manifest`, `_require_env_json`) and removed repeated boilerplate across command handlers
+  - removed unused analytics helper (`topk_by_numeric_field`)
+- Added simplification learning note (`docs/learnings/2026-02-07-simplification-pass.md`).
+- Added analytics foundation modules:
+  - `evm/scripts/analytics_registry.py`
+  - `evm/scripts/analytics_time_range.py`
+  - `evm/scripts/analytics_scanner.py`
+  - `evm/scripts/analytics_aggregators.py`
+- Added initial analytics commands:
+  - `analytics dex-swap-flow`
+  - `analytics factory-new-pools`
+- Added `cast_format_units` adapter support for decimal rendering in analytics outputs.
+- Added analytics integration tests in `evm/tests/test_evm_rpc_wrapper.py`.
+- Added analytics learning and roadmap docs (`docs/learnings/2026-02-07-analytics-foundation-v0.1.md`, `docs/plans/analytics-commands-plan.md`).
 - Pivoted runtime architecture to a cast-backed hybrid model while preserving wrapper policy/safety orchestration.
 - Added `evm/scripts/cast_adapter.py` and delegated low-level RPC/ABI/namehash/unit primitives to `cast`.
 - Updated `evm/scripts/rpc_transport.py` to use `cast rpc` by default and keep direct HTTP transport for deterministic `eth_getLogs` chunk/split behavior.

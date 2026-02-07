@@ -201,6 +201,13 @@ def cast_from_wei(value: Any, unit: str = "eth") -> str:
     return stdout
 
 
+def cast_format_units(value: Any, unit: int | str) -> str:
+    rc, stdout, stderr = _run_cast(["format-units", _cast_arg(value), str(unit)])
+    if rc != 0:
+        raise ValueError(stderr or f"cast format-units failed with exit code {rc}")
+    return stdout
+
+
 def cast_function_selector(signature: str) -> str:
     rc, stdout, stderr = _run_cast(["sig", signature])
     if rc != 0:
