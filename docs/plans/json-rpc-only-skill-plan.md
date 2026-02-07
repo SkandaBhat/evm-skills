@@ -1,7 +1,7 @@
 # JSON-RPC Only Skill Plan
 
 ## Goal
-Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `ethereum/execution-apis`, without any `cast` dependency.
+Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `ethereum/execution-apis`, with a JSON-RPC-only runtime.
 
 ## Status (2026-02-07)
 - Completed:
@@ -30,7 +30,7 @@ Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `
   - `engine`: `24`
 
 ## Non-goals
-- No `cast` integration or `cast` fallback.
+- No alternate CLI fallback path.
 - No RPC URL persistence to disk.
 
 ## Architecture
@@ -134,7 +134,7 @@ Every method in inventory must have one of:
    - no hidden fallback to external public RPCs.
 
 ## Acceptance criteria
-1. `cast` files removed from repo.
+1. Repository remains JSON-RPC-only.
 2. Skill metadata and docs describe JSON-RPC-only model.
 3. Inventory includes all methods from upstream snapshot.
 4. Coverage checker proves all methods are mapped.

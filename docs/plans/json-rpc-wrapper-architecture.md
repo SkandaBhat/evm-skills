@@ -5,7 +5,7 @@ Define a robust wrapper architecture for `evm` that:
 1. supports all methods in `execution-apis` inventory,
 2. enforces strict user-safe policy controls,
 3. remains deterministic and testable,
-4. does not depend on `cast`.
+4. remains JSON-RPC-only without external CLI dependencies.
 
 ## Status (2026-02-07)
 - Implemented modules:

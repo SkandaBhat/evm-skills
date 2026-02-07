@@ -47,7 +47,7 @@ Make the `evm` skill usable for multi-step agent workflows without ad-hoc script
    - Chain RPC steps and convenience commands execute through the same manifest+policy gates.
 4. No RPC URL fallback
    - Missing `ETH_RPC_URL` still returns mandated message.
-5. No cast dependency
+5. JSON-RPC-only runtime
    - ENS resolution implemented with JSON-RPC `eth_call` + local namehash.
 
 ## Chain request contract
@@ -110,5 +110,5 @@ Make the `evm` skill usable for multi-step agent workflows without ad-hoc script
 1. Agents can execute multi-step workflows with one command and deterministic JSON output.
 2. Template substitution can consume prior step outputs safely.
 3. Output extraction supports direct piping (`--result-only`, `--select`).
-4. ENS and balance convenience commands work without cast and without public RPC fallback.
+4. ENS and balance convenience commands work without public RPC fallback.
 5. Existing safety invariants remain intact.

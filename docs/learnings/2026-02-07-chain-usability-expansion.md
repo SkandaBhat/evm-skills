@@ -27,7 +27,6 @@ User feedback highlighted a practical gap: single-call JSON-RPC wrapper support 
 - ENS resolution uses JSON-RPC `eth_call` only:
   1. ENS registry `resolver(bytes32)` lookup.
   2. Resolver `addr(bytes32)` lookup.
-- No cast dependency.
 - No RPC fallback selection.
 - Local namehash support is implemented in `transforms.py`.
 

@@ -1,6 +1,6 @@
 ---
 name: evm
-description: Agent workflow for EVM operations using Ethereum JSON-RPC only (no cast dependency), with method coverage aligned to ethereum/execution-apis.
+description: Agent workflow for EVM operations using Ethereum JSON-RPC only, with method coverage aligned to ethereum/execution-apis.
 license: Proprietary. LICENSE.txt has complete terms
 compatibility: Requires python3 and an RPC endpoint provided by ETH_RPC_URL.
 ---
@@ -10,7 +10,7 @@ compatibility: Requires python3 and an RPC endpoint provided by ETH_RPC_URL.
 Use this skill for EVM tasks through Ethereum JSON-RPC only.
 
 ## Core rules
-1. Do not invoke `cast`.
+1. Use only the JSON-RPC wrapper flow defined in this skill.
 2. Do not invent or auto-select public RPC URLs.
 3. Require `ETH_RPC_URL` for RPC-dependent operations.
 4. If `ETH_RPC_URL` is missing, ask:
