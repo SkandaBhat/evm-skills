@@ -62,6 +62,7 @@ def normalized_context(raw_context: dict[str, Any] | None) -> dict[str, Any]:
         "allow_local_sensitive": bool(ctx.get("allow_local_sensitive", False)),
         "allow_broadcast": bool(ctx.get("allow_broadcast", False)),
         "allow_operator": bool(ctx.get("allow_operator", False)),
+        "allow_heavy_read": bool(ctx.get("allow_heavy_read", False)),
         "confirmation_token": str(ctx.get("confirmation_token", "")).strip(),
     }
 

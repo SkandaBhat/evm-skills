@@ -18,6 +18,12 @@
 - Updated core plans/architecture docs to include shipped multi-step runtime and output shaping.
 - Updated docs index to include new plan/learning entries and `transforms.py` module mapping.
 - Cleaned documentation set and removed obsolete legacy-learning notes.
+- Added advanced capability implementation plan for logs, ABI, multicall, simulation, traces, and provenance (`docs/plans/advanced-json-rpc-capabilities-plan.md`).
+- Shipped R1 advanced capabilities: chunked `logs` command, heavy-read guard, adaptive split, deterministic dedupe (`evm/scripts/logs_engine.py`).
+- Shipped R2 advanced capabilities: `abi` command, ABI transforms, and client-side `multicall` command (`evm/scripts/abi_codec.py`, `evm/scripts/multicall_engine.py`).
+- Shipped R3 advanced capabilities: `simulate` and `trace` commands with revert decoding and trace unsupported handling (`evm/scripts/simulate_engine.py`, `evm/scripts/trace_engine.py`).
+- Added R2/R3 learning note: `docs/learnings/2026-02-07-r2-r3-abi-multicall-simulate-trace.md`.
+- Added top-level `README.md` with a human-to-agent “Prompting Agents” getting-started section and reusable prompt templates.
 
 ## 2026-02-06
 - Initialized project documentation structure under `docs/`.

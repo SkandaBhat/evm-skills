@@ -15,6 +15,11 @@ Define a robust wrapper architecture for `evm` that:
   - `evm/scripts/policy_eval.py`
   - `evm/scripts/adapters.py`
   - `evm/scripts/transforms.py`
+  - `evm/scripts/logs_engine.py`
+  - `evm/scripts/abi_codec.py`
+  - `evm/scripts/multicall_engine.py`
+  - `evm/scripts/simulate_engine.py`
+  - `evm/scripts/trace_engine.py`
   - `evm/scripts/rpc_transport.py`
   - `evm/scripts/error_map.py`
   - `evm/scripts/coverage_check.py`
@@ -30,6 +35,10 @@ Define a robust wrapper architecture for `evm` that:
   - output extraction modes (`--result-only`, `--select`)
   - transform helpers (`hex_to_int`, `wei_to_eth`, `slice_last_20_bytes_to_address`)
   - convenience commands (`ens resolve`, `balance`)
+- Advanced phases shipped:
+  - R1: logs chunking + heavy-read gating
+  - R2: ABI helpers + multicall command
+  - R3: simulation preflight + trace negotiation command
 
 ## Design principles
 1. Single responsibility per module.

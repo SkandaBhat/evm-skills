@@ -9,9 +9,14 @@ Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `
   - Phase 2 (core runtime wrapper in `evm/scripts/evm_rpc.py`)
   - Phase 3 (`v0.2` adapter hardening for local-sensitive and broadcast methods)
   - Phase 4 (`v0.2.x` chain usability expansion: `chain`/`batch`, output selectors, transforms, ENS/balance convenience commands)
+  - advanced runtime phases:
+    - R1: logs engine
+    - R2: ABI + multicall
+    - R3: simulation + trace
   - method manifest + story validation tooling
 - Remaining:
   - optional deeper operator (`engine_*`) method-specific validation
+  - advanced runtime capability R4 (`provenance`)
   - CI wiring and release hardening
 
 ## Version roadmap
@@ -37,6 +42,7 @@ Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `
 Detailed module-level architecture lives in:
 - `docs/plans/json-rpc-wrapper-architecture.md`
 - `docs/plans/chain-usability-expansion.md`
+- `docs/plans/advanced-json-rpc-capabilities-plan.md`
 
 1. Method registry
    - Generated inventory from `execution-apis` YAML definitions.

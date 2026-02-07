@@ -19,19 +19,28 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from error_map import (  # noqa: E402
     ERR_ADAPTER_VALIDATION,
+    ERR_ABI_DECODE_FAILED,
+    ERR_ABI_ENCODE_FAILED,
     ERR_INTERNAL,
     ERR_INVALID_REQUEST,
+    ERR_LOGS_RANGE_TOO_LARGE,
+    ERR_MULTICALL_PARTIAL_FAILURE,
+    ERR_POLICY_DENIED,
     ERR_RPC_BROADCAST_ALREADY_KNOWN,
     ERR_RPC_BROADCAST_INSUFFICIENT_FUNDS,
     ERR_RPC_BROADCAST_NONCE_TOO_LOW,
     ERR_RPC_BROADCAST_UNDERPRICED,
     ERR_RPC_REMOTE,
+    ERR_SIMULATION_REVERTED,
+    ERR_TRACE_UNSUPPORTED,
     ERR_RPC_TIMEOUT,
     ERR_RPC_URL_REQUIRED,
     RPC_URL_REQUIRED_MESSAGE,
 )
 from adapters import validate_adapter_preflight  # noqa: E402
+from abi_codec import run_abi_operation  # noqa: E402
 from method_registry import load_manifest_by_method, load_json  # noqa: E402
+from multicall_engine import normalize_multicall_request, run_multicall  # noqa: E402
 from policy_eval import evaluate_policy  # noqa: E402
 from rpc_contract import (  # noqa: E402
     DEFAULT_TIMEOUT_SECONDS,
@@ -41,7 +50,15 @@ from rpc_contract import (  # noqa: E402
     validate_request,
 )
 from rpc_transport import invoke_rpc  # noqa: E402
+from simulate_engine import normalize_simulation_request, run_simulation  # noqa: E402
+from trace_engine import normalize_trace_request, run_trace  # noqa: E402
 from transforms import apply_transform, ens_namehash  # noqa: E402
+from logs_engine import (  # noqa: E402
+    DEFAULT_HEAVY_READ_THRESHOLD,
+    is_heavy_read,
+    normalize_logs_request,
+    run_chunked_logs,
+)
 
 DEFAULT_MANIFEST = (SCRIPT_DIR.parent / "references" / "method-manifest.json").resolve()
 
@@ -522,6 +539,498 @@ def cmd_exec(args: argparse.Namespace) -> int:
     if render_rc != 0:
         return render_rc
     return exit_code
+
+
+def _parse_logs_request_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    if args.request_file:
+        with open(args.request_file, encoding="utf-8") as f:
+            return json.load(f)
+    if args.request_json:
+        return json.loads(args.request_json)
+    raise ValueError("logs requires --request-file or --request-json")
+
+
+def _sanitized_logs_request(req: dict[str, Any]) -> dict[str, Any]:
+    out = dict(req)
+    env = out.get("env")
+    if isinstance(env, dict):
+        out["env"] = {"keys": sorted(str(k) for k in env.keys())}
+    return out
+
+
+def _parse_json_request_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
+    if args.request_file:
+        with open(args.request_file, encoding="utf-8") as f:
+            return json.load(f)
+    if args.request_json:
+        return json.loads(args.request_json)
+    raise ValueError(f"{command} requires --request-file or --request-json")
+
+
+def cmd_logs(args: argparse.Namespace) -> int:
+    manifest_path = Path(args.manifest).resolve()
+    loaded, manifest_data = _load_manifest_or_error(manifest_path)
+    if not loaded:
+        print(_json_dump(manifest_data, pretty=not args.compact))
+        return 2
+    manifest_by_method = manifest_data
+
+    try:
+        logs_req = _parse_logs_request_from_args(args)
+    except Exception as err:  # noqa: BLE001
+        _print_error(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=str(err),
+            pretty=not args.compact,
+        )
+        return 2
+
+    ok, normalized, err = normalize_logs_request(logs_req)
+    if not ok:
+        payload = _build_error_payload(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=err,
+        )
+        payload["request"] = _sanitized_logs_request(logs_req if isinstance(logs_req, dict) else {})
+        print(_json_dump(payload, pretty=not args.compact))
+        return 2
+
+    context = normalized_context(normalized.get("context"))
+    is_heavy, span = is_heavy_read(normalized)
+    threshold = int(normalized.get("heavy_read_block_range_threshold", DEFAULT_HEAVY_READ_THRESHOLD))
+    if is_heavy and not bool(context.get("allow_heavy_read", False)):
+        policy = {
+            "allowed": False,
+            "method": "eth_getLogs",
+            "tier": "read",
+            "error_code": ERR_POLICY_DENIED,
+            "reason": (
+                "logs query over "
+                f"{span} blocks requires allow_heavy_read=true "
+                f"(threshold={threshold})"
+            ),
+            "requires_confirmation": False,
+        }
+        payload = _build_error_payload(
+            method="logs",
+            status="denied",
+            code=ERR_POLICY_DENIED,
+            message=policy["reason"],
+            policy=policy,
+        )
+        payload["request"] = _sanitized_logs_request(normalized)
+        print(_json_dump(payload, pretty=not args.compact))
+        return 4
+
+    timeout_seconds = normalized.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
+    if timeout_seconds is None:
+        timeout_seconds = DEFAULT_TIMEOUT_SECONDS
+
+    def fetch_chunk(logs_filter: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        req: dict[str, Any] = {
+            "method": "eth_getLogs",
+            "params": [logs_filter],
+            "context": context,
+            "timeout_seconds": float(timeout_seconds),
+        }
+        env = normalized.get("env", {})
+        if isinstance(env, dict) and env:
+            req["env"] = env
+        return run_rpc_request(req=req, manifest_by_method=manifest_by_method)
+
+    exit_code, logs_result = run_chunked_logs(
+        normalized_request=normalized,
+        fetch_chunk=fetch_chunk,
+    )
+
+    if exit_code != 0 or not bool(logs_result.get("ok", False)):
+        payload = _build_error_payload(
+            method="logs",
+            status=str(logs_result.get("status", "error")),
+            code=str(logs_result.get("error_code", ERR_LOGS_RANGE_TOO_LARGE)),
+            message=str(logs_result.get("error_message", "log query failed")),
+        )
+        payload["request"] = _sanitized_logs_request(normalized)
+        if "summary" in logs_result:
+            payload["summary"] = logs_result["summary"]
+        if "failed_interval" in logs_result:
+            payload["failed_interval"] = logs_result["failed_interval"]
+        if "cause" in logs_result:
+            payload["cause"] = logs_result["cause"]
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return exit_code
+
+    payload = {
+        "timestamp_utc": _timestamp(),
+        "method": "logs",
+        "status": "ok",
+        "ok": True,
+        "error_code": None,
+        "error_message": None,
+        "request": _sanitized_logs_request(normalized),
+        "result": logs_result.get("result", []),
+        "summary": logs_result.get("summary", {}),
+    }
+    render_rc = _render_output(
+        payload=payload,
+        compact=args.compact,
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field="result",
+    )
+    if render_rc != 0:
+        return render_rc
+    return 0
+
+
+def cmd_abi(args: argparse.Namespace) -> int:
+    try:
+        abi_req = _parse_json_request_from_args(args, command="abi")
+    except Exception as err:  # noqa: BLE001
+        _print_error(
+            method="abi",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=str(err),
+            pretty=not args.compact,
+        )
+        return 2
+
+    ok, result, err = run_abi_operation(abi_req)
+    if not ok:
+        operation = str(abi_req.get("operation", "")).strip().lower() if isinstance(abi_req, dict) else ""
+        if operation in {"encode_call", "function_selector", "event_topic0"}:
+            code = ERR_ABI_ENCODE_FAILED
+        elif operation in {"decode_output", "decode_log"}:
+            code = ERR_ABI_DECODE_FAILED
+        else:
+            code = ERR_INVALID_REQUEST
+        payload = _build_error_payload(
+            method="abi",
+            status="error",
+            code=code,
+            message=err,
+        )
+        if isinstance(abi_req, dict):
+            payload["request"] = _sanitized_request(abi_req)
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return 2
+
+    payload = {
+        "timestamp_utc": _timestamp(),
+        "method": "abi",
+        "status": "ok",
+        "ok": True,
+        "error_code": None,
+        "error_message": None,
+        "request": _sanitized_request(abi_req),
+        "result": result,
+    }
+    render_rc = _render_output(
+        payload=payload,
+        compact=args.compact,
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field="result",
+    )
+    if render_rc != 0:
+        return render_rc
+    return 0
+
+
+def cmd_multicall(args: argparse.Namespace) -> int:
+    manifest_path = Path(args.manifest).resolve()
+    loaded, manifest_data = _load_manifest_or_error(manifest_path)
+    if not loaded:
+        print(_json_dump(manifest_data, pretty=not args.compact))
+        return 2
+    manifest_by_method = manifest_data
+
+    try:
+        request = _parse_json_request_from_args(args, command="multicall")
+    except Exception as err:  # noqa: BLE001
+        _print_error(
+            method="multicall",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=str(err),
+            pretty=not args.compact,
+        )
+        return 2
+
+    ok, normalized, err = normalize_multicall_request(request)
+    if not ok:
+        payload = _build_error_payload(
+            method="multicall",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=err,
+        )
+        if isinstance(request, dict):
+            payload["request"] = _sanitized_request(request)
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return 2
+
+    def execute(req: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return run_rpc_request(req=req, manifest_by_method=manifest_by_method)
+
+    exit_code, mc_result = run_multicall(normalized_request=normalized, execute_call=execute)
+    if exit_code != 0 or not bool(mc_result.get("ok", False)):
+        payload = _build_error_payload(
+            method="multicall",
+            status=str(mc_result.get("status", "error")),
+            code=str(mc_result.get("error_code", ERR_MULTICALL_PARTIAL_FAILURE)),
+            message=str(mc_result.get("error_message", "multicall failed")),
+        )
+        payload["request"] = _sanitized_request(request if isinstance(request, dict) else {})
+        payload["result"] = mc_result.get("result", [])
+        payload["summary"] = mc_result.get("summary", {})
+        if "failed_call" in mc_result:
+            payload["failed_call"] = mc_result["failed_call"]
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return exit_code
+
+    payload = {
+        "timestamp_utc": _timestamp(),
+        "method": "multicall",
+        "status": "ok",
+        "ok": True,
+        "error_code": None,
+        "error_message": None,
+        "request": _sanitized_request(request),
+        "result": mc_result.get("result", []),
+        "summary": mc_result.get("summary", {}),
+    }
+    render_rc = _render_output(
+        payload=payload,
+        compact=args.compact,
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field="result",
+    )
+    if render_rc != 0:
+        return render_rc
+    return 0
+
+
+def cmd_simulate(args: argparse.Namespace) -> int:
+    manifest_path = Path(args.manifest).resolve()
+    loaded, manifest_data = _load_manifest_or_error(manifest_path)
+    if not loaded:
+        print(_json_dump(manifest_data, pretty=not args.compact))
+        return 2
+    manifest_by_method = manifest_data
+
+    try:
+        request = _parse_json_request_from_args(args, command="simulate")
+    except Exception as err:  # noqa: BLE001
+        _print_error(
+            method="simulate",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=str(err),
+            pretty=not args.compact,
+        )
+        return 2
+
+    ok, normalized, err = normalize_simulation_request(request)
+    if not ok:
+        payload = _build_error_payload(
+            method="simulate",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=err,
+        )
+        if isinstance(request, dict):
+            payload["request"] = _sanitized_request(request)
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return 2
+
+    def execute(req: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return run_rpc_request(req=req, manifest_by_method=manifest_by_method)
+
+    exit_code, sim_result = run_simulation(normalized_request=normalized, execute_rpc=execute)
+    if exit_code != 0 or not bool(sim_result.get("ok", False)):
+        payload = _build_error_payload(
+            method="simulate",
+            status=str(sim_result.get("status", "error")),
+            code=str(sim_result.get("error_code", ERR_SIMULATION_REVERTED)),
+            message=str(sim_result.get("error_message", "simulation failed")),
+        )
+        payload["request"] = _sanitized_request(request if isinstance(request, dict) else {})
+        payload["result"] = sim_result.get("result")
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return exit_code
+
+    payload = {
+        "timestamp_utc": _timestamp(),
+        "method": "simulate",
+        "status": "ok",
+        "ok": True,
+        "error_code": None,
+        "error_message": None,
+        "request": _sanitized_request(request),
+        "result": sim_result.get("result"),
+    }
+    render_rc = _render_output(
+        payload=payload,
+        compact=args.compact,
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field="result",
+    )
+    if render_rc != 0:
+        return render_rc
+    return 0
+
+
+def cmd_trace(args: argparse.Namespace) -> int:
+    manifest_path = Path(args.manifest).resolve()
+    loaded, manifest_data = _load_manifest_or_error(manifest_path)
+    if not loaded:
+        print(_json_dump(manifest_data, pretty=not args.compact))
+        return 2
+    manifest_by_method = manifest_data
+
+    try:
+        request = _parse_json_request_from_args(args, command="trace")
+    except Exception as err:  # noqa: BLE001
+        _print_error(
+            method="trace",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=str(err),
+            pretty=not args.compact,
+        )
+        return 2
+
+    ok, normalized, err = normalize_trace_request(request)
+    if not ok:
+        payload = _build_error_payload(
+            method="trace",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=err,
+        )
+        if isinstance(request, dict):
+            payload["request"] = _sanitized_request(request)
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return 2
+
+    def execute(req: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return run_rpc_request(req=req, manifest_by_method=manifest_by_method)
+
+    exit_code, trace_result = run_trace(
+        normalized_request=normalized,
+        manifest_by_method=manifest_by_method,
+        execute_rpc=execute,
+    )
+    if exit_code != 0 or not bool(trace_result.get("ok", False)):
+        payload = _build_error_payload(
+            method="trace",
+            status=str(trace_result.get("status", "error")),
+            code=str(trace_result.get("error_code", ERR_TRACE_UNSUPPORTED)),
+            message=str(trace_result.get("error_message", "trace failed")),
+        )
+        payload["request"] = _sanitized_request(request if isinstance(request, dict) else {})
+        if "attempts" in trace_result:
+            payload["attempts"] = trace_result["attempts"]
+        if "cause" in trace_result:
+            payload["cause"] = trace_result["cause"]
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return exit_code
+
+    payload = {
+        "timestamp_utc": _timestamp(),
+        "method": "trace",
+        "status": "ok",
+        "ok": True,
+        "error_code": None,
+        "error_message": None,
+        "request": _sanitized_request(request),
+        "result": trace_result.get("result"),
+        "method_used": trace_result.get("method_used"),
+        "trace_payload": trace_result.get("trace_payload"),
+        "attempts": trace_result.get("attempts", []),
+    }
+    render_rc = _render_output(
+        payload=payload,
+        compact=args.compact,
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field="result",
+    )
+    if render_rc != 0:
+        return render_rc
+    return 0
 
 
 def _parse_chain_request_from_args(args: argparse.Namespace) -> dict[str, Any]:
@@ -1316,10 +1825,16 @@ def _add_output_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_chain_args(parser: argparse.ArgumentParser) -> None:
+def _add_manifest_request_output_args(parser: argparse.ArgumentParser, *, label: str) -> None:
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")
-    parser.add_argument("--request-file", help="chain request JSON file")
-    parser.add_argument("--request-json", help="chain request JSON string")
+    parser.add_argument("--request-file", help=f"{label} request JSON file")
+    parser.add_argument("--request-json", help=f"{label} request JSON string")
+    _add_output_args(parser)
+
+
+def _add_request_output_args(parser: argparse.ArgumentParser, *, label: str) -> None:
+    parser.add_argument("--request-file", help=f"{label} request JSON file")
+    parser.add_argument("--request-json", help=f"{label} request JSON string")
     _add_output_args(parser)
 
 
@@ -1340,12 +1855,35 @@ def build_parser() -> argparse.ArgumentParser:
     _add_output_args(exec_parser)
     exec_parser.set_defaults(func=cmd_exec)
 
+    logs_parser = sub.add_parser("logs", help="Execute chunked eth_getLogs workflows")
+    _add_manifest_request_output_args(logs_parser, label="logs")
+    logs_parser.set_defaults(func=cmd_logs)
+
+    abi_parser = sub.add_parser("abi", help="ABI encode/decode helpers")
+    _add_request_output_args(abi_parser, label="abi")
+    abi_parser.set_defaults(func=cmd_abi)
+
+    multicall_parser = sub.add_parser(
+        "multicall",
+        help="Run many eth_call requests with shared context and deterministic output",
+    )
+    _add_manifest_request_output_args(multicall_parser, label="multicall")
+    multicall_parser.set_defaults(func=cmd_multicall)
+
+    simulate_parser = sub.add_parser("simulate", help="Run eth_call and optional eth_estimateGas preflight")
+    _add_manifest_request_output_args(simulate_parser, label="simulate")
+    simulate_parser.set_defaults(func=cmd_simulate)
+
+    trace_parser = sub.add_parser("trace", help="Run trace methods when provider and manifest support them")
+    _add_manifest_request_output_args(trace_parser, label="trace")
+    trace_parser.set_defaults(func=cmd_trace)
+
     chain_parser = sub.add_parser("chain", help="Execute a chain of JSON-RPC and transform steps")
-    _add_chain_args(chain_parser)
+    _add_manifest_request_output_args(chain_parser, label="chain")
     chain_parser.set_defaults(func=cmd_chain)
 
     batch_parser = sub.add_parser("batch", help="Alias for chain")
-    _add_chain_args(batch_parser)
+    _add_manifest_request_output_args(batch_parser, label="chain")
     batch_parser.set_defaults(func=cmd_batch)
 
     ens_parser = sub.add_parser("ens", help="ENS convenience commands")

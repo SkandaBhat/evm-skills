@@ -45,14 +45,30 @@ Use this skill for EVM tasks through Ethereum JSON-RPC only.
     - `hex_to_int`
     - `wei_to_eth`
     - `slice_last_20_bytes_to_address`
+    - `abi_encode_call`
+    - `abi_decode_output`
+    - `abi_decode_log`
   - convenience commands:
     - `ens resolve <name>`
     - `balance <name-or-address> --at <tag>`
+- R1 advanced capabilities (foundation + logs) are implemented:
+  - `logs` command with chunked `eth_getLogs` workflows
+  - heavy-read guard via `context.allow_heavy_read`
+  - adaptive split and deterministic dedupe for large-range log scans
+- R2 advanced capabilities (ABI + multicall) are implemented:
+  - `abi` command with `encode_call`, `decode_output`, `decode_log`, selector/topic helpers
+  - `multicall` command for aggregated `eth_call` workflows with per-call status and optional decode
+- R3 advanced capabilities (simulation + trace) are implemented:
+  - `simulate` command for `eth_call` + optional `eth_estimateGas` preflight
+  - revert parsing for `Error(string)` and panic selectors
+  - `trace` command with manifest/provider capability negotiation and `TRACE_UNSUPPORTED` fallback
 - Coverage and policy tooling:
   - `scripts/build_method_manifest.py`
   - `scripts/coverage_check.py`
   - `scripts/validate_user_stories.py`
-- Additional optional `engine_*` payload preflight hardening is tracked as backlog.
+- Additional optional hardening remains:
+  - R4 provenance completion
+  - optional deeper `engine_*` payload preflight validation
 
 ## High-value commands
 - List supported methods:
@@ -61,6 +77,16 @@ Use this skill for EVM tasks through Ethereum JSON-RPC only.
   - `python3 scripts/evm_rpc.py exec --manifest references/method-manifest.json --request-json '{"method":"eth_blockNumber","params":[],"context":{}}'`
 - Execute a multi-step workflow:
   - `python3 scripts/evm_rpc.py chain --manifest references/method-manifest.json --request-json '{"steps":[{"id":"b","method":"eth_blockNumber","params":[]},{"id":"n","transform":"hex_to_int","input":"{{b.result}}"}]}'`
+- Query logs with chunking:
+  - `python3 scripts/evm_rpc.py logs --manifest references/method-manifest.json --request-json '{"filter":{"address":"0x1111111111111111111111111111111111111111","topics":[],"fromBlock":1,"toBlock":5000},"context":{"allow_heavy_read":true},"chunk_size":1000}'`
+- Encode calldata from signature + args:
+  - `python3 scripts/evm_rpc.py abi --request-json '{"operation":"encode_call","signature":"balanceOf(address)","args":["0x1111111111111111111111111111111111111111"]}'`
+- Aggregate many reads:
+  - `python3 scripts/evm_rpc.py multicall --manifest references/method-manifest.json --request-json '{"calls":[{"id":"a","to":"0x1111111111111111111111111111111111111111","signature":"balanceOf(address)","args":["0x1111111111111111111111111111111111111111"],"decode_output":["uint256"]}]}'`
+- Simulation preflight:
+  - `python3 scripts/evm_rpc.py simulate --manifest references/method-manifest.json --request-json '{"call_object":{"to":"0x1111111111111111111111111111111111111111","data":"0x70a082310000000000000000000000001111111111111111111111111111111111111111"},"include_estimate_gas":true}'`
+- Trace request (if manifest/provider supports trace methods):
+  - `python3 scripts/evm_rpc.py trace --manifest references/method-manifest.json --request-json '{"mode":"call","call_object":{"to":"0x1111111111111111111111111111111111111111","data":"0x1234"}}'`
 - Balance convenience:
   - `python3 scripts/evm_rpc.py balance vitalik.eth --manifest references/method-manifest.json`
 - ENS convenience:

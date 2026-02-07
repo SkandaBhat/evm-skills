@@ -173,4 +173,53 @@ def apply_transform(name: str, value: Any) -> tuple[bool, Any, str]:
         return transform_wei_to_eth(value)
     if normalized == "slice_last_20_bytes_to_address":
         return transform_slice_last_20_bytes_to_address(value)
+    if normalized == "abi_encode_call":
+        if not isinstance(value, dict):
+            return False, None, "abi_encode_call: input must be an object"
+        signature = value.get("signature")
+        args = value.get("args", [])
+        if not isinstance(signature, str) or not signature.strip():
+            return False, None, "abi_encode_call: signature must be a non-empty string"
+        if not isinstance(args, list):
+            return False, None, "abi_encode_call: args must be an array"
+        try:
+            from abi_codec import encode_call  # local import to avoid cycle
+
+            return True, encode_call(signature, args), ""
+        except Exception as err:  # noqa: BLE001
+            return False, None, f"abi_encode_call: {err}"
+    if normalized == "abi_decode_output":
+        if not isinstance(value, dict):
+            return False, None, "abi_decode_output: input must be an object"
+        types = value.get("types")
+        data = value.get("data")
+        if types is None:
+            return False, None, "abi_decode_output: types is required"
+        if not isinstance(data, str):
+            return False, None, "abi_decode_output: data must be a hex string"
+        try:
+            from abi_codec import decode_output  # local import to avoid cycle
+
+            return True, decode_output(types, data), ""
+        except Exception as err:  # noqa: BLE001
+            return False, None, f"abi_decode_output: {err}"
+    if normalized == "abi_decode_log":
+        if not isinstance(value, dict):
+            return False, None, "abi_decode_log: input must be an object"
+        event_decl = value.get("event")
+        topics = value.get("topics")
+        data = value.get("data")
+        anonymous = bool(value.get("anonymous", False))
+        if not isinstance(event_decl, str) or not event_decl.strip():
+            return False, None, "abi_decode_log: event must be a non-empty string"
+        if not isinstance(topics, list):
+            return False, None, "abi_decode_log: topics must be an array"
+        if not isinstance(data, str):
+            return False, None, "abi_decode_log: data must be a hex string"
+        try:
+            from abi_codec import decode_log  # local import to avoid cycle
+
+            return True, decode_log(event_decl, topics, data, anonymous=anonymous), ""
+        except Exception as err:  # noqa: BLE001
+            return False, None, f"abi_decode_log: {err}"
     return False, None, f"unknown transform: {name}"
