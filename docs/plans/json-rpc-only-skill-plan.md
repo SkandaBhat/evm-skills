@@ -1,7 +1,7 @@
 # JSON-RPC Only Skill Plan
 
 ## Goal
-Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `ethereum/execution-apis`, with a JSON-RPC-only runtime.
+Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `ethereum/execution-apis`, with a JSON-RPC-only runtime contract and cast-backed low-level execution.
 
 ## Status (2026-02-07)
 - Completed:
@@ -36,6 +36,7 @@ Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `
 
 ## Non-goals
 - No alternate CLI fallback path.
+- No non-RPC analytics API dependency in the core skill.
 - No RPC URL persistence to disk.
 
 ## Architecture

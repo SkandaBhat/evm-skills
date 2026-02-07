@@ -1,6 +1,6 @@
 # evm
 
-Agent skill runtime for Ethereum JSON-RPC workflows.
+Agent skill runtime for Ethereum JSON-RPC workflows with a cast-backed runtime.
 
 This repo provides an `evm` skill with deterministic, policy-first commands for:
 1. direct JSON-RPC execution,
@@ -11,6 +11,15 @@ This repo provides an `evm` skill with deterministic, policy-first commands for:
 6. simulation preflight,
 7. trace negotiation.
 
+## Runtime Requirements
+1. `python3`
+2. `cast` (Foundry CLI) available in `PATH`
+3. `ETH_RPC_URL` provided by the user/session (not persisted by this skill)
+
+Architecture split:
+1. Wrapper-owned: policy gates, safety controls, chain templating, deterministic envelopes, logs orchestration.
+2. Cast-delegated: low-level JSON-RPC calls, ABI encode/decode primitives, selectors/topic hashes, wei/namehash utilities.
+
 ## Prompting Agents
 Use this section when a human is interacting with an agent like Codex or Claude Code.
 
@@ -19,6 +28,7 @@ Use this section when a human is interacting with an agent like Codex or Claude 
 ```text
 Use the `evm` skill only.
 Use JSON-RPC only via the skill wrapper commands.
+Require cast as the low-level runtime; do not replace the wrapper with ad-hoc scripts.
 Never invent or auto-select public RPC URLs.
 If ETH_RPC_URL is missing, ask exactly:
 "couldnt find an rpc url. give me an rpc url so i can add it to env."

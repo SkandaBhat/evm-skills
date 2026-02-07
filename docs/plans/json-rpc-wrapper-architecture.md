@@ -5,7 +5,7 @@ Define a robust wrapper architecture for `evm` that:
 1. supports all methods in `execution-apis` inventory,
 2. enforces strict user-safe policy controls,
 3. remains deterministic and testable,
-4. remains JSON-RPC-only without external CLI dependencies.
+4. remains JSON-RPC-only with a cast-backed low-level execution layer.
 
 ## Status (2026-02-07)
 - Implemented modules:
@@ -74,9 +74,9 @@ Define a robust wrapper architecture for `evm` that:
 4. `policy_eval.py`
    - Evaluates tier gates and confirmation requirements.
 5. `rpc_transport.py`
-   - HTTP JSON-RPC client with timeout/retry policy.
+   - Hybrid transport (`cast rpc` for most methods; direct HTTP for deterministic `eth_getLogs` handling).
 6. `transforms.py`
-   - Local transform helpers and ENS namehash helper.
+   - Transform helpers with cast-backed unit/namehash primitives.
 7. `error_map.py`
    - Stable internal error taxonomy and JSON-RPC mapping.
 8. `coverage_check.py`

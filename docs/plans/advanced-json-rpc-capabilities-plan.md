@@ -1,7 +1,7 @@
 # Advanced JSON-RPC Capabilities Plan
 
 ## Objective
-Implement the next layer of `evm` skill capabilities while keeping the runtime JSON-RPC-only:
+Implement the next layer of `evm` skill capabilities while keeping the runtime JSON-RPC-only contract and wrapper-first controls:
 1. robust log querying,
 2. ABI encode/decode workflows,
 3. multicall aggregation,

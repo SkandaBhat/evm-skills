@@ -48,7 +48,7 @@ Make the `evm` skill usable for multi-step agent workflows without ad-hoc script
 4. No RPC URL fallback
    - Missing `ETH_RPC_URL` still returns mandated message.
 5. JSON-RPC-only runtime
-   - ENS resolution implemented with JSON-RPC `eth_call` + local namehash.
+   - ENS resolution implemented with JSON-RPC `eth_call` and cast-backed namehash utility.
 
 ## Chain request contract
 ```json

@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import csv
+import gzip
+import hashlib
 import json
 import re
 import sys
@@ -21,8 +25,12 @@ from error_map import (  # noqa: E402
     ERR_ADAPTER_VALIDATION,
     ERR_ABI_DECODE_FAILED,
     ERR_ABI_ENCODE_FAILED,
+    ERR_INVALID_BLOCK_RANGE,
+    ERR_INVALID_LOG_ADDRESS,
     ERR_INTERNAL,
     ERR_INVALID_REQUEST,
+    ERR_INVALID_TOPIC_FORMAT,
+    ERR_INVALID_TOPIC_LENGTH,
     ERR_LOGS_RANGE_TOO_LARGE,
     ERR_MULTICALL_PARTIAL_FAILURE,
     ERR_POLICY_DENIED,
@@ -38,7 +46,7 @@ from error_map import (  # noqa: E402
     RPC_URL_REQUIRED_MESSAGE,
 )
 from adapters import validate_adapter_preflight  # noqa: E402
-from abi_codec import run_abi_operation  # noqa: E402
+from abi_codec import decode_log, event_topic0, run_abi_operation  # noqa: E402
 from method_registry import load_manifest_by_method, load_json  # noqa: E402
 from multicall_engine import normalize_multicall_request, run_multicall  # noqa: E402
 from policy_eval import evaluate_policy  # noqa: E402
@@ -68,6 +76,14 @@ ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 HEX32_RE = re.compile(r"^0x[0-9a-fA-F]{64}$")
 TEMPLATE_FULL_RE = re.compile(r"^\{\{\s*([^{}]+?)\s*\}\}$")
 TEMPLATE_ANY_RE = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
+
+KNOWN_EVENT_SIGNATURES: dict[str, str] = {
+    "transfer": "Transfer(address,address,uint256)",
+    "approval": "Approval(address,address,uint256)",
+}
+ERC20_TRANSFER_EVENT_DECL = "Transfer(address indexed from,address indexed to,uint256 value)"
+# Fixed keccak256("Transfer(address,address,uint256)") topic0.
+ERC20_TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
 
 def _json_dump(payload: Any, pretty: bool = True) -> str:
@@ -325,6 +341,57 @@ def _map_broadcast_remote_error(rpc_response: dict[str, Any]) -> str:
     return ERR_RPC_REMOTE
 
 
+def _remote_error_hint(method: str, rpc_response: dict[str, Any]) -> str | None:
+    err = rpc_response.get("error")
+    if not isinstance(err, dict):
+        return None
+
+    code = err.get("code")
+    message = str(err.get("message", "")).lower()
+    combined = f"{method} {message}"
+
+    if code == -32602:
+        return (
+            "provider rejected params (-32602). check address/topic format and "
+            "block range values in your request."
+        )
+
+    range_patterns = (
+        "query returned more than",
+        "too many results",
+        "response size exceeded",
+        "range",
+        "block range",
+        "limit exceeded",
+    )
+    if any(p in combined for p in range_patterns):
+        return "provider rejected range/size. reduce range, lower chunk_size, or use --last."
+
+    timeout_patterns = ("timed out", "timeout", "deadline exceeded")
+    if any(p in combined for p in timeout_patterns):
+        return "provider timed out. reduce range/chunk_size or retry with a faster RPC endpoint."
+
+    if "method not found" in combined:
+        return "provider does not support this method on the current endpoint."
+
+    return None
+
+
+def _transport_error_hint(method: str, error_code: str, error_message: str) -> str | None:
+    lowered = str(error_message).lower()
+    if "cast is required but not installed" in lowered:
+        return "install Foundry cast and ensure it is available in PATH."
+    if error_code == ERR_RPC_TIMEOUT:
+        if method == "eth_getLogs":
+            return "eth_getLogs timed out. reduce range/chunk_size, or use --last for smaller windows."
+        return "request timed out. retry or use a faster RPC endpoint."
+    if error_code == ERR_RPC_REMOTE and ("timed out" in lowered or "timeout" in lowered):
+        return "provider timed out. reduce payload size and retry."
+    if error_code != ERR_RPC_TIMEOUT and ("429" in lowered or "rate limit" in lowered):
+        return "rate limited by provider. slow down requests or switch endpoint."
+    return None
+
+
 def _load_manifest_or_error(manifest_path: Path) -> tuple[bool, dict[str, dict[str, Any]] | dict[str, Any]]:
     if not manifest_path.exists():
         return False, _build_error_payload(
@@ -424,6 +491,11 @@ def run_rpc_request(
 
     if not transport["ok"]:
         status = "timeout" if transport["error_code"] == ERR_RPC_TIMEOUT else "error"
+        hint = _transport_error_hint(
+            method,
+            str(transport["error_code"]),
+            str(transport.get("error_message", "")),
+        )
         return (
             1,
             _build_error_payload(
@@ -436,6 +508,7 @@ def run_rpc_request(
                 rpc_request=rpc_request_meta,
                 rpc_response=transport.get("rpc_response"),
                 duration_ms=duration_ms,
+                hint=hint,
             ),
         )
 
@@ -446,6 +519,7 @@ def run_rpc_request(
             if policy.get("tier") == "broadcast"
             else ERR_RPC_REMOTE
         )
+        hint = _remote_error_hint(method, rpc_response)
         return (
             1,
             _build_error_payload(
@@ -458,6 +532,7 @@ def run_rpc_request(
                 rpc_request=rpc_request_meta,
                 rpc_response=rpc_response,
                 duration_ms=duration_ms,
+                hint=hint,
             ),
         )
 
@@ -558,6 +633,370 @@ def _sanitized_logs_request(req: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _resolve_event_signature(raw_event: str) -> str:
+    event = str(raw_event).strip()
+    if not event:
+        raise ValueError("event cannot be empty")
+    if "(" in event and ")" in event:
+        return event
+    alias = KNOWN_EVENT_SIGNATURES.get(event.lower())
+    if alias:
+        return alias
+    raise ValueError(f"unknown event alias: {event}")
+
+
+def _apply_logs_event_filter(raw_request: dict[str, Any], event_raw: str | None) -> tuple[bool, str]:
+    if not event_raw:
+        return True, ""
+
+    try:
+        event_sig = _resolve_event_signature(event_raw)
+        topic0 = event_topic0(event_sig)
+    except Exception as err:  # noqa: BLE001
+        return False, str(err)
+
+    logs_filter = raw_request.setdefault("filter", {})
+    if not isinstance(logs_filter, dict):
+        return False, "logs request.filter must be an object"
+
+    topics = logs_filter.get("topics")
+    if topics is None:
+        logs_filter["topics"] = [topic0]
+        raw_request["event"] = event_sig
+        return True, ""
+    if not isinstance(topics, list):
+        return True, ""
+    if not topics:
+        logs_filter["topics"] = [topic0]
+        raw_request["event"] = event_sig
+        return True, ""
+
+    first = topics[0]
+    if first is None:
+        topics[0] = topic0
+        raw_request["event"] = event_sig
+        return True, ""
+    if isinstance(first, str) and first.lower() == topic0.lower():
+        raw_request["event"] = event_sig
+        return True, ""
+
+    return False, "filter.topics[0] conflicts with --event topic0"
+
+
+def _parse_nonnegative_hex_or_decimal(raw: str) -> tuple[bool, int]:
+    if raw.startswith("0x"):
+        try:
+            return True, int(raw, 16)
+        except Exception:  # noqa: BLE001
+            return False, 0
+    if raw.isdigit():
+        return True, int(raw, 10)
+    return False, 0
+
+
+def _resolve_logs_last_range(
+    *,
+    raw_request: dict[str, Any],
+    last_blocks: int | None,
+    manifest_by_method: dict[str, dict[str, Any]],
+) -> tuple[int, dict[str, Any] | None, dict[str, Any] | None]:
+    if last_blocks is None:
+        return 0, None, None
+
+    if isinstance(last_blocks, bool) or not isinstance(last_blocks, int) or last_blocks <= 0:
+        payload = _build_error_payload(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_BLOCK_RANGE,
+            message="last_blocks must be a positive integer",
+        )
+        return 2, payload, None
+
+    logs_filter = raw_request.setdefault("filter", {})
+    if not isinstance(logs_filter, dict):
+        payload = _build_error_payload(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="logs request.filter must be an object",
+        )
+        return 2, payload, None
+    if "fromBlock" in logs_filter or "toBlock" in logs_filter:
+        payload = _build_error_payload(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_BLOCK_RANGE,
+            message="--last cannot be combined with explicit filter.fromBlock/toBlock",
+        )
+        return 2, payload, None
+
+    req: dict[str, Any] = {
+        "method": "eth_blockNumber",
+        "params": [],
+        "context": raw_request.get("context", {}) if isinstance(raw_request.get("context", {}), dict) else {},
+        "timeout_seconds": float(raw_request.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)),
+    }
+    if isinstance(raw_request.get("env"), dict) and raw_request.get("env"):
+        req["env"] = raw_request["env"]
+
+    exit_code, latest_payload = run_rpc_request(req=req, manifest_by_method=manifest_by_method)
+    if exit_code != 0:
+        wrapped = _wrap_stage_failure("logs", "eth_blockNumber for --last", latest_payload)
+        return exit_code, wrapped, None
+
+    latest_raw = latest_payload.get("result")
+    if not isinstance(latest_raw, str):
+        payload = _build_error_payload(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_BLOCK_RANGE,
+            message="eth_blockNumber returned non-string result",
+        )
+        payload["cause"] = latest_payload
+        return 2, payload, None
+
+    ok_latest, latest_block = _parse_nonnegative_hex_or_decimal(latest_raw)
+    if not ok_latest:
+        payload = _build_error_payload(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_BLOCK_RANGE,
+            message="eth_blockNumber returned invalid block quantity",
+        )
+        payload["cause"] = latest_payload
+        return 2, payload, None
+
+    start_block = max(0, latest_block - last_blocks + 1)
+    logs_filter["fromBlock"] = start_block
+    logs_filter["toBlock"] = latest_block
+    meta = {
+        "last_blocks": last_blocks,
+        "resolved_latest_block": latest_block,
+        "resolved_from_block": start_block,
+        "resolved_to_block": latest_block,
+    }
+    return 0, None, meta
+
+
+def _format_scaled_decimal(raw_value: str, decimals: int) -> str:
+    as_int = int(raw_value, 10)
+    if decimals <= 0:
+        return str(as_int)
+    whole, frac = divmod(as_int, 10**decimals)
+    if frac == 0:
+        return str(whole)
+    frac_str = f"{frac:0{decimals}d}".rstrip("0")
+    return f"{whole}.{frac_str}"
+
+
+def _resolve_erc20_decimals(
+    *,
+    token_addresses: list[str],
+    context: dict[str, Any],
+    env: dict[str, Any],
+    timeout_seconds: float,
+    manifest_by_method: dict[str, dict[str, Any]],
+) -> tuple[dict[str, int | None], list[dict[str, Any]]]:
+    decimals_by_token: dict[str, int | None] = {}
+    failures: list[dict[str, Any]] = []
+
+    for token in token_addresses:
+        req: dict[str, Any] = {
+            "method": "eth_call",
+            "params": [{"to": token, "data": "0x313ce567"}, "latest"],
+            "context": context,
+            "timeout_seconds": timeout_seconds,
+        }
+        if env:
+            req["env"] = env
+
+        exit_code, payload = run_rpc_request(req=req, manifest_by_method=manifest_by_method)
+        if exit_code != 0:
+            decimals_by_token[token] = None
+            failures.append({"token": token, "error": payload})
+            continue
+
+        result = payload.get("result")
+        if not isinstance(result, str):
+            decimals_by_token[token] = None
+            failures.append({"token": token, "error": "decimals() returned non-string"})
+            continue
+        ok_value, as_int = _parse_nonnegative_hex_or_decimal(result)
+        if not ok_value or as_int > 255:
+            decimals_by_token[token] = None
+            failures.append({"token": token, "error": f"invalid decimals() value: {result}"})
+            continue
+        decimals_by_token[token] = as_int
+
+    return decimals_by_token, failures
+
+
+def _decode_erc20_transfer_rows(
+    *,
+    logs: list[Any],
+    decimals: int | None,
+    decimals_auto: bool,
+    context: dict[str, Any],
+    env: dict[str, Any],
+    timeout_seconds: float,
+    manifest_by_method: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    token_addresses = sorted(
+        {
+            str(item.get("address", "")).lower()
+            for item in logs
+            if isinstance(item, dict)
+            and isinstance(item.get("address"), str)
+            and ADDRESS_RE.fullmatch(str(item.get("address")))
+        }
+    )
+
+    decimals_by_token: dict[str, int | None] = {}
+    decimals_failures: list[dict[str, Any]] = []
+    if decimals is not None:
+        decimals_by_token = {addr: decimals for addr in token_addresses}
+    elif decimals_auto and token_addresses:
+        decimals_by_token, decimals_failures = _resolve_erc20_decimals(
+            token_addresses=token_addresses,
+            context=context,
+            env=env,
+            timeout_seconds=timeout_seconds,
+            manifest_by_method=manifest_by_method,
+        )
+
+    rows: list[dict[str, Any]] = []
+    decode_failures = 0
+    for item in logs:
+        if not isinstance(item, dict):
+            decode_failures += 1
+            rows.append({"decode_error": "log item is not an object", "raw": item})
+            continue
+
+        token = str(item.get("address", "")).lower()
+        topics = item.get("topics", [])
+        data = item.get("data", "0x")
+        try:
+            decoded = decode_log(ERC20_TRANSFER_EVENT_DECL, topics, data, anonymous=False)
+            args = decoded.get("args", [])
+            from_addr = str(args[0].get("value"))
+            to_addr = str(args[1].get("value"))
+            value_raw = str(args[2].get("value"))
+            decimals_for_token = decimals_by_token.get(token)
+            value_decimal = (
+                _format_scaled_decimal(value_raw, decimals_for_token)
+                if isinstance(decimals_for_token, int)
+                else None
+            )
+            rows.append(
+                {
+                    "from": from_addr,
+                    "to": to_addr,
+                    "value_raw": value_raw,
+                    "value_decimal": value_decimal,
+                    "decimals": decimals_for_token,
+                    "token": token,
+                    "blockNumber": item.get("blockNumber"),
+                    "txHash": item.get("transactionHash"),
+                    "logIndex": item.get("logIndex"),
+                }
+            )
+        except Exception as err:  # noqa: BLE001
+            decode_failures += 1
+            rows.append(
+                {
+                    "decode_error": str(err),
+                    "token": token,
+                    "blockNumber": item.get("blockNumber"),
+                    "txHash": item.get("transactionHash"),
+                    "logIndex": item.get("logIndex"),
+                }
+            )
+
+    summary: dict[str, Any] = {
+        "decoded_rows": len(rows) - decode_failures,
+        "decode_failures": decode_failures,
+    }
+    if decimals_by_token:
+        summary["decimals_by_token"] = decimals_by_token
+    if decimals_failures:
+        summary["decimals_failures"] = decimals_failures
+    return rows, summary
+
+
+def _stable_sample(items: list[Any], sample_size: int) -> list[Any]:
+    if sample_size >= len(items):
+        return list(items)
+    scored: list[tuple[str, int, Any]] = []
+    for idx, item in enumerate(items):
+        raw = json.dumps(item, sort_keys=True, separators=(",", ":"), default=str)
+        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        scored.append((digest, idx, item))
+    scored.sort(key=lambda row: (row[0], row[1]))
+    selected_idx = sorted(row[1] for row in scored[:sample_size])
+    return [items[idx] for idx in selected_idx]
+
+
+def _flatten_csv_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(",", ":"), sort_keys=True)
+    return str(value)
+
+
+def _write_logs_output(
+    *,
+    out_path: str,
+    fmt: str,
+    use_gzip: bool,
+    rows: list[Any],
+) -> dict[str, Any]:
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    opener = gzip.open if use_gzip else open
+    mode = "wt"
+    with opener(path, mode, encoding="utf-8", newline="") as handle:  # type: ignore[arg-type]
+        if fmt == "json":
+            handle.write(_json_dump(rows, pretty=False))
+            handle.write("\n")
+        elif fmt == "jsonl":
+            for row in rows:
+                handle.write(json.dumps(row, separators=(",", ":"), sort_keys=False))
+                handle.write("\n")
+        elif fmt == "csv":
+            normalized_rows: list[dict[str, Any]] = []
+            for row in rows:
+                if isinstance(row, dict):
+                    normalized_rows.append(row)
+                else:
+                    normalized_rows.append({"value": row})
+            fieldnames = sorted({key for row in normalized_rows for key in row.keys()})
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in normalized_rows:
+                writer.writerow({key: _flatten_csv_value(row.get(key)) for key in fieldnames})
+        else:
+            raise ValueError(f"unsupported output format: {fmt}")
+
+    return {
+        "path": str(path),
+        "format": fmt,
+        "gzip": use_gzip,
+        "rows": len(rows),
+    }
+
+
+def _validate_positive_optional(value: int | None, *, field: str) -> tuple[bool, str]:
+    if value is None:
+        return True, ""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return False, f"{field} must be a positive integer"
+    return True, ""
+
+
 def _parse_json_request_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
     if args.request_file:
         with open(args.request_file, encoding="utf-8") as f:
@@ -587,15 +1026,113 @@ def cmd_logs(args: argparse.Namespace) -> int:
         )
         return 2
 
-    ok, normalized, err = normalize_logs_request(logs_req)
-    if not ok:
+    if not isinstance(logs_req, dict):
+        _print_error(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="logs request must be an object",
+            pretty=not args.compact,
+        )
+        return 2
+
+    ok_lim, err_lim = _validate_positive_optional(args.limit, field="--limit")
+    if not ok_lim:
+        _print_error(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=err_lim,
+            pretty=not args.compact,
+        )
+        return 2
+    ok_smp, err_smp = _validate_positive_optional(args.sample, field="--sample")
+    if not ok_smp:
+        _print_error(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=err_smp,
+            pretty=not args.compact,
+        )
+        return 2
+
+    if args.decimals is not None and (args.decimals < 0 or args.decimals > 255):
+        _print_error(
+            method="logs",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="--decimals must be between 0 and 255",
+            pretty=not args.compact,
+        )
+        return 2
+
+    raw_request = copy.deepcopy(logs_req)
+    if args.event:
+        raw_request["event"] = args.event
+    if args.last_blocks is not None:
+        raw_request["last_blocks"] = args.last_blocks
+    if args.decode_erc20_transfer:
+        raw_request["decode_mode"] = "erc20_transfer"
+    if args.decimals is not None:
+        raw_request["decimals"] = args.decimals
+    if args.decimals_auto:
+        raw_request["decimals_auto"] = True
+
+    applied_event = raw_request.get("event")
+    event_ok, event_err = _apply_logs_event_filter(
+        raw_request,
+        str(applied_event) if isinstance(applied_event, str) else None,
+    )
+    if not event_ok:
         payload = _build_error_payload(
             method="logs",
             status="error",
             code=ERR_INVALID_REQUEST,
-            message=err,
+            message=event_err,
         )
-        payload["request"] = _sanitized_logs_request(logs_req if isinstance(logs_req, dict) else {})
+        payload["request"] = _sanitized_logs_request(raw_request)
+        print(_json_dump(payload, pretty=not args.compact))
+        return 2
+
+    request_last_blocks = raw_request.get("last_blocks")
+    cli_last_blocks = args.last_blocks
+    last_blocks = cli_last_blocks if cli_last_blocks is not None else request_last_blocks
+    last_rc, last_payload, last_meta = _resolve_logs_last_range(
+        raw_request=raw_request,
+        last_blocks=last_blocks,
+        manifest_by_method=manifest_by_method,
+    )
+    if last_rc != 0:
+        if last_payload is None:
+            _print_error(
+                method="logs",
+                status="error",
+                code=ERR_INTERNAL,
+                message="unexpected --last resolution failure",
+                pretty=not args.compact,
+            )
+            return 2
+        render_rc = _render_output(
+            payload=last_payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return last_rc
+
+    ok, normalized, err_code, err_message = normalize_logs_request(raw_request)
+    if not ok:
+        payload = _build_error_payload(
+            method="logs",
+            status="error",
+            code=err_code or ERR_INVALID_REQUEST,
+            message=err_message or "invalid logs request",
+        )
+        payload["request"] = _sanitized_logs_request(raw_request)
         print(_json_dump(payload, pretty=not args.compact))
         return 2
 
@@ -672,6 +1209,77 @@ def cmd_logs(args: argparse.Namespace) -> int:
             return render_rc
         return exit_code
 
+    result_rows: list[Any] = list(logs_result.get("result", []))
+    summary = dict(logs_result.get("summary", {}))
+
+    decode_mode = str(raw_request.get("decode_mode", "")).strip().lower()
+    if decode_mode == "erc20_transfer":
+        decimals_raw = raw_request.get("decimals")
+        decimals = int(decimals_raw) if isinstance(decimals_raw, int) else None
+        decimals_auto = bool(raw_request.get("decimals_auto", False))
+        decoded_rows, decode_summary = _decode_erc20_transfer_rows(
+            logs=result_rows,
+            decimals=decimals,
+            decimals_auto=decimals_auto,
+            context=context,
+            env=normalized.get("env", {}),
+            timeout_seconds=float(timeout_seconds),
+            manifest_by_method=manifest_by_method,
+        )
+        result_rows = decoded_rows
+        summary["decode_mode"] = "erc20_transfer"
+        summary["decode"] = decode_summary
+
+    controls_summary: dict[str, Any] = {"input_rows": len(result_rows)}
+    if args.sample is not None:
+        result_rows = _stable_sample(result_rows, int(args.sample))
+        controls_summary["after_sample"] = len(result_rows)
+    if args.limit is not None:
+        result_rows = result_rows[: int(args.limit)]
+        controls_summary["after_limit"] = len(result_rows)
+    if bool(args.summary_only):
+        result_rows = []
+        controls_summary["summary_only"] = True
+
+    if args.out:
+        try:
+            file_output = _write_logs_output(
+                out_path=args.out,
+                fmt=args.format,
+                use_gzip=bool(args.gzip),
+                rows=result_rows,
+            )
+            summary["file_output"] = file_output
+        except Exception as err:  # noqa: BLE001
+            payload = _build_error_payload(
+                method="logs",
+                status="error",
+                code=ERR_INVALID_REQUEST,
+                message=f"failed writing output file: {err}",
+            )
+            payload["request"] = _sanitized_logs_request(raw_request)
+            render_rc = _render_output(
+                payload=payload,
+                compact=args.compact,
+                result_only=bool(args.result_only),
+                select=args.select,
+                result_field="result",
+            )
+            if render_rc != 0:
+                return render_rc
+            return 2
+
+    summary["output_controls"] = controls_summary
+    if last_meta:
+        summary["resolved_last"] = last_meta
+    if isinstance(raw_request.get("event"), str):
+        summary["event"] = {
+            "signature": raw_request["event"],
+            "topic0": ERC20_TRANSFER_TOPIC0
+            if str(raw_request["event"]).lower() == KNOWN_EVENT_SIGNATURES["transfer"].lower()
+            else event_topic0(str(raw_request["event"])),
+        }
+
     payload = {
         "timestamp_utc": _timestamp(),
         "method": "logs",
@@ -679,9 +1287,9 @@ def cmd_logs(args: argparse.Namespace) -> int:
         "ok": True,
         "error_code": None,
         "error_message": None,
-        "request": _sanitized_logs_request(normalized),
-        "result": logs_result.get("result", []),
-        "summary": logs_result.get("summary", {}),
+        "request": _sanitized_logs_request(raw_request),
+        "result": result_rows,
+        "summary": summary,
     }
     render_rc = _render_output(
         payload=payload,
@@ -1857,6 +2465,48 @@ def build_parser() -> argparse.ArgumentParser:
 
     logs_parser = sub.add_parser("logs", help="Execute chunked eth_getLogs workflows")
     _add_manifest_request_output_args(logs_parser, label="logs")
+    logs_parser.add_argument("--event", help="event signature or alias (e.g. transfer)")
+    logs_parser.add_argument(
+        "--last",
+        "--last-blocks",
+        dest="last_blocks",
+        type=int,
+        help="query only the latest N blocks (cannot be combined with explicit fromBlock/toBlock)",
+    )
+    logs_parser.add_argument(
+        "--decode-erc20-transfer",
+        action="store_true",
+        help="decode logs as ERC20 Transfer events",
+    )
+    logs_parser.add_argument(
+        "--decimals",
+        type=int,
+        help="fixed decimals to use for ERC20 value_decimal formatting",
+    )
+    logs_parser.add_argument(
+        "--decimals-auto",
+        action="store_true",
+        help="resolve decimals() per token via eth_call when decoding ERC20 transfers",
+    )
+    logs_parser.add_argument("--limit", type=int, help="limit output rows after processing")
+    logs_parser.add_argument(
+        "--sample",
+        type=int,
+        help="deterministically sample N rows before applying --limit",
+    )
+    logs_parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="return summary metadata without row payloads",
+    )
+    logs_parser.add_argument("--out", help="write rows to file")
+    logs_parser.add_argument(
+        "--format",
+        default="json",
+        choices=("json", "jsonl", "csv"),
+        help="row output format when using --out",
+    )
+    logs_parser.add_argument("--gzip", action="store_true", help="gzip --out file contents")
     logs_parser.set_defaults(func=cmd_logs)
 
     abi_parser = sub.add_parser("abi", help="ABI encode/decode helpers")

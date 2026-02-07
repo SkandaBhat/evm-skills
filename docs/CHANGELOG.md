@@ -1,6 +1,14 @@
 # Docs Changelog
 
 ## 2026-02-07
+- Pivoted runtime architecture to a cast-backed hybrid model while preserving wrapper policy/safety orchestration.
+- Added `evm/scripts/cast_adapter.py` and delegated low-level RPC/ABI/namehash/unit primitives to `cast`.
+- Updated `evm/scripts/rpc_transport.py` to use `cast rpc` by default and keep direct HTTP transport for deterministic `eth_getLogs` chunk/split behavior.
+- Added logs CLI output/filter controls (`--event`, `--last`, `--decode-erc20-transfer`, output shaping flags).
+- Removed import-time cast dependency in `evm/scripts/evm_rpc.py` (constant topic0 now static) so startup errors are avoided.
+- Added runtime guard tests for missing-cast behavior and transport split guarantees (`evm/tests/test_evm_rpc_wrapper.py`).
+- Added cast-hybrid learning note and architecture plan (`docs/learnings/2026-02-07-cast-hybrid-runtime.md`, `docs/plans/cast-hybrid-architecture.md`).
+- Updated `README.md`, `evm/SKILL.md`, and docs index for cast dependency/architecture updates.
 - Renamed skill package path from `evm-jsonrpc-wallet/` to `evm/`.
 - Updated all docs/plans/learnings to the `evm/` package path.
 - Implemented packaged runtime wrapper `evm/scripts/evm_rpc.py` with policy-first JSON-RPC execution.

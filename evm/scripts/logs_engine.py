@@ -8,7 +8,11 @@ import re
 from typing import Any, Callable
 
 from error_map import (
+    ERR_INVALID_BLOCK_RANGE,
+    ERR_INVALID_LOG_ADDRESS,
     ERR_INVALID_REQUEST,
+    ERR_INVALID_TOPIC_FORMAT,
+    ERR_INVALID_TOPIC_LENGTH,
     ERR_LOGS_ENGINE_FAILED,
     ERR_LOGS_RANGE_TOO_LARGE,
     ERR_LOGS_TOO_MANY_RESULTS,
@@ -19,6 +23,8 @@ from error_map import (
 
 ALLOWED_BLOCK_TAGS = {"earliest", "latest", "pending", "safe", "finalized"}
 HEX_QUANTITY_RE = re.compile(r"^0x[0-9a-fA-F]+$")
+HEX32_RE = re.compile(r"^0x[0-9a-fA-F]{64}$")
+ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 
 DEFAULT_CHUNK_SIZE = 2_000
 DEFAULT_MAX_CHUNKS = 200
@@ -74,46 +80,115 @@ def parse_block_bound(value: Any, *, field: str) -> tuple[bool, int | str, bool,
     )
 
 
-def normalize_logs_request(request: dict[str, Any]) -> tuple[bool, dict[str, Any], str]:
+def _validation_error(code: str, message: str) -> tuple[bool, dict[str, Any], str, str]:
+    return False, {}, code, message
+
+
+def _validate_address_field(value: Any, *, field: str) -> tuple[bool, str, str]:
+    if isinstance(value, str):
+        if not ADDRESS_RE.fullmatch(value):
+            return False, ERR_INVALID_LOG_ADDRESS, f"{field} must be a 20-byte 0x-prefixed hex address"
+        return True, "", ""
+
+    if isinstance(value, list):
+        if not value:
+            return False, ERR_INVALID_LOG_ADDRESS, f"{field} array cannot be empty"
+        for idx, item in enumerate(value):
+            if not isinstance(item, str) or not ADDRESS_RE.fullmatch(item):
+                return (
+                    False,
+                    ERR_INVALID_LOG_ADDRESS,
+                    f"{field}[{idx}] must be a 20-byte 0x-prefixed hex address",
+                )
+        return True, "", ""
+
+    return False, ERR_INVALID_LOG_ADDRESS, f"{field} must be a string or array of strings"
+
+
+def _validate_topic_value(value: Any, *, field: str) -> tuple[bool, str, str]:
+    if value is None:
+        return True, "", ""
+
+    if isinstance(value, str):
+        if not value.startswith("0x"):
+            return False, ERR_INVALID_TOPIC_FORMAT, f"{field} must be 0x-prefixed hex"
+        if len(value) != 66:
+            return (
+                False,
+                ERR_INVALID_TOPIC_LENGTH,
+                f"{field} must be exactly 32 bytes (66 chars including 0x)",
+            )
+        if not HEX32_RE.fullmatch(value):
+            return False, ERR_INVALID_TOPIC_FORMAT, f"{field} must contain only hex characters"
+        return True, "", ""
+
+    if isinstance(value, list):
+        if not value:
+            return False, ERR_INVALID_TOPIC_FORMAT, f"{field} OR-array cannot be empty"
+        for idx, item in enumerate(value):
+            ok, code, err = _validate_topic_value(item, field=f"{field}[{idx}]")
+            if not ok:
+                return False, code, err
+        return True, "", ""
+
+    return False, ERR_INVALID_TOPIC_FORMAT, f"{field} must be null, topic string, or array of topic strings"
+
+
+def normalize_logs_request(request: dict[str, Any]) -> tuple[bool, dict[str, Any], str, str]:
     if not isinstance(request, dict):
-        return False, {}, "logs request must be an object"
+        return _validation_error(ERR_INVALID_REQUEST, "logs request must be an object")
 
     raw_filter = request.get("filter")
     if not isinstance(raw_filter, dict):
-        return False, {}, "logs request.filter must be an object"
+        return _validation_error(ERR_INVALID_REQUEST, "logs request.filter must be an object")
 
     logs_filter = copy.deepcopy(raw_filter)
     if "blockHash" in logs_filter and ("fromBlock" in logs_filter or "toBlock" in logs_filter):
-        return False, {}, "filter.blockHash cannot be combined with filter.fromBlock/toBlock"
+        return _validation_error(
+            ERR_INVALID_BLOCK_RANGE,
+            "filter.blockHash cannot be combined with filter.fromBlock/toBlock",
+        )
+
+    if "blockHash" in logs_filter:
+        block_hash = logs_filter.get("blockHash")
+        if not isinstance(block_hash, str) or not HEX32_RE.fullmatch(block_hash):
+            return _validation_error(
+                ERR_INVALID_BLOCK_RANGE,
+                "filter.blockHash must be a 32-byte 0x-prefixed hex hash",
+            )
 
     address = logs_filter.get("address")
     if address is not None:
-        if isinstance(address, str):
-            pass
-        elif isinstance(address, list) and all(isinstance(item, str) for item in address):
-            pass
-        else:
-            return False, {}, "filter.address must be a string or array of strings"
+        ok_addr, addr_code, addr_err = _validate_address_field(address, field="filter.address")
+        if not ok_addr:
+            return _validation_error(addr_code, addr_err)
 
     topics = logs_filter.get("topics")
-    if topics is not None and not isinstance(topics, list):
-        return False, {}, "filter.topics must be an array when provided"
+    if topics is not None:
+        if not isinstance(topics, list):
+            return _validation_error(ERR_INVALID_TOPIC_FORMAT, "filter.topics must be an array when provided")
+        if len(topics) > 4:
+            return _validation_error(ERR_INVALID_TOPIC_FORMAT, "filter.topics supports at most 4 positions")
+        for idx, topic_value in enumerate(topics):
+            ok_topic, topic_code, topic_err = _validate_topic_value(topic_value, field=f"filter.topics[{idx}]")
+            if not ok_topic:
+                return _validation_error(topic_code, topic_err)
 
     from_bound = logs_filter.get("fromBlock", "latest")
     to_bound = logs_filter.get("toBlock", "latest")
     from_ok, from_value, from_numeric, from_err = parse_block_bound(from_bound, field="filter.fromBlock")
     if not from_ok:
-        return False, {}, from_err
+        return _validation_error(ERR_INVALID_BLOCK_RANGE, from_err)
     to_ok, to_value, to_numeric, to_err = parse_block_bound(to_bound, field="filter.toBlock")
     if not to_ok:
-        return False, {}, to_err
+        return _validation_error(ERR_INVALID_BLOCK_RANGE, to_err)
 
     numeric_range: tuple[int, int] | None = None
     if from_numeric and to_numeric:
         start_block = int(from_value)
         end_block = int(to_value)
         if start_block > end_block:
-            return False, {}, "filter.fromBlock must be <= filter.toBlock"
+            return _validation_error(ERR_INVALID_BLOCK_RANGE, "filter.fromBlock must be <= filter.toBlock")
         numeric_range = (start_block, end_block)
         logs_filter["fromBlock"] = _to_hex_quantity(start_block)
         logs_filter["toBlock"] = _to_hex_quantity(end_block)
@@ -123,7 +198,7 @@ def normalize_logs_request(request: dict[str, Any]) -> tuple[bool, dict[str, Any
 
     timeout = request.get("timeout_seconds")
     if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0):
-        return False, {}, "logs request.timeout_seconds must be a positive number"
+        return _validation_error(ERR_INVALID_REQUEST, "logs request.timeout_seconds must be a positive number")
 
     def parse_positive_int(name: str, default: int) -> tuple[bool, int, str]:
         raw = request.get(name, default)
@@ -133,29 +208,32 @@ def normalize_logs_request(request: dict[str, Any]) -> tuple[bool, dict[str, Any
 
     ok_chunk, chunk_size, chunk_err = parse_positive_int("chunk_size", DEFAULT_CHUNK_SIZE)
     if not ok_chunk:
-        return False, {}, chunk_err
+        return _validation_error(ERR_INVALID_REQUEST, chunk_err)
     ok_max_chunks, max_chunks, max_chunks_err = parse_positive_int("max_chunks", DEFAULT_MAX_CHUNKS)
     if not ok_max_chunks:
-        return False, {}, max_chunks_err
+        return _validation_error(ERR_INVALID_REQUEST, max_chunks_err)
     ok_max_logs, max_logs, max_logs_err = parse_positive_int("max_logs", DEFAULT_MAX_LOGS)
     if not ok_max_logs:
-        return False, {}, max_logs_err
+        return _validation_error(ERR_INVALID_REQUEST, max_logs_err)
 
     threshold_raw = request.get("heavy_read_block_range_threshold", DEFAULT_HEAVY_READ_THRESHOLD)
     if isinstance(threshold_raw, bool) or not isinstance(threshold_raw, int) or threshold_raw <= 0:
-        return False, {}, "logs request.heavy_read_block_range_threshold must be a positive integer"
+        return _validation_error(
+            ERR_INVALID_REQUEST,
+            "logs request.heavy_read_block_range_threshold must be a positive integer",
+        )
 
     adaptive_split = request.get("adaptive_split", True)
     if not isinstance(adaptive_split, bool):
-        return False, {}, "logs request.adaptive_split must be a boolean"
+        return _validation_error(ERR_INVALID_REQUEST, "logs request.adaptive_split must be a boolean")
 
     context = request.get("context", {})
     if context and not isinstance(context, dict):
-        return False, {}, "logs request.context must be an object"
+        return _validation_error(ERR_INVALID_REQUEST, "logs request.context must be an object")
 
     env = request.get("env", {})
     if env and (not isinstance(env, dict) or not all(isinstance(k, str) for k in env.keys())):
-        return False, {}, "logs request.env must be an object with string keys"
+        return _validation_error(ERR_INVALID_REQUEST, "logs request.env must be an object with string keys")
 
     normalized = {
         "filter": logs_filter,
@@ -169,7 +247,7 @@ def normalize_logs_request(request: dict[str, Any]) -> tuple[bool, dict[str, Any
         "heavy_read_block_range_threshold": threshold_raw,
         "numeric_range": numeric_range,
     }
-    return True, normalized, ""
+    return True, normalized, "", ""
 
 
 def is_heavy_read(normalized_request: dict[str, Any]) -> tuple[bool, int]:

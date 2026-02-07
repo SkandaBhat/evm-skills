@@ -1,21 +1,22 @@
 ---
 name: evm
-description: Agent workflow for EVM operations using Ethereum JSON-RPC only, with method coverage aligned to ethereum/execution-apis.
+description: Agent workflow for EVM operations using Ethereum JSON-RPC, with cast-backed low-level execution and policy-first wrapper controls.
 license: Proprietary. LICENSE.txt has complete terms
-compatibility: Requires python3 and an RPC endpoint provided by ETH_RPC_URL.
+compatibility: Requires python3, cast (Foundry CLI), and an RPC endpoint provided by ETH_RPC_URL.
 ---
 
 # EVM JSON-RPC Wallet Skill
 
-Use this skill for EVM tasks through Ethereum JSON-RPC only.
+Use this skill for EVM tasks through Ethereum JSON-RPC with a wrapper+cast hybrid runtime.
 
 ## Core rules
 1. Use only the JSON-RPC wrapper flow defined in this skill.
-2. Do not invent or auto-select public RPC URLs.
-3. Require `ETH_RPC_URL` for RPC-dependent operations.
-4. If `ETH_RPC_URL` is missing, ask:
+2. Treat `cast` as required runtime dependency for low-level execution.
+3. Do not invent or auto-select public RPC URLs.
+4. Require `ETH_RPC_URL` for RPC-dependent operations.
+5. If `ETH_RPC_URL` is missing, ask:
    - `couldnt find an rpc url. give me an rpc url so i can add it to env.`
-5. Do not persist RPC URLs to disk.
+6. Do not persist RPC URLs to disk.
 
 ## Method coverage source of truth
 - `references/rpc-method-inventory.json` (machine-readable inventory)
@@ -31,6 +32,8 @@ Use this skill for EVM tasks through Ethereum JSON-RPC only.
 
 ## Current status
 - Runtime wrapper is available at `scripts/evm_rpc.py`.
+- Cast adapter runtime is available at `scripts/cast_adapter.py`.
+- `scripts/rpc_transport.py` delegates most methods through `cast rpc`, with deterministic HTTP path for `eth_getLogs`.
 - `v0.2` adapter hardening is implemented for:
   - `eth_accounts`
   - `eth_sign`

@@ -1,4 +1,8 @@
-"""HTTP JSON-RPC transport with bounded retries."""
+"""JSON-RPC transport helpers.
+
+Default path delegates to `cast rpc`. `eth_getLogs` uses direct HTTP transport so
+the logs engine controls chunking/splitting deterministically.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +13,7 @@ import urllib.request
 from socket import timeout as SocketTimeout
 from typing import Any
 
+from cast_adapter import cast_rpc
 from error_map import ERR_RPC_TIMEOUT, ERR_RPC_TRANSPORT
 
 RETRYABLE_HTTP_CODES = {429, 502, 503, 504}
@@ -20,7 +25,7 @@ def _sleep_backoff(attempt: int) -> None:
         time.sleep(backoffs[attempt])
 
 
-def invoke_rpc(
+def _invoke_rpc_http(
     *,
     rpc_url: str,
     payload: dict[str, Any],
@@ -99,3 +104,27 @@ def invoke_rpc(
         "error_message": "unknown transport failure",
         "rpc_response": None,
     }
+
+
+def invoke_rpc(
+    *,
+    rpc_url: str,
+    payload: dict[str, Any],
+    timeout_seconds: float,
+    retries: int,
+) -> dict[str, Any]:
+    # Keep logs deterministic and fully controlled by the wrapper.
+    if str(payload.get("method", "")).strip() == "eth_getLogs":
+        return _invoke_rpc_http(
+            rpc_url=rpc_url,
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+            retries=retries,
+        )
+
+    return cast_rpc(
+        rpc_url=rpc_url,
+        payload=payload,
+        timeout_seconds=timeout_seconds,
+        retries=retries,
+    )

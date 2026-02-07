@@ -340,6 +340,22 @@ def test_rpc_error_response_maps_to_remote_error():
         _stop(server)
 
 
+def test_exec_reports_clear_error_when_cast_missing():
+    req = {"method": "eth_blockNumber", "params": [], "id": 1, "context": {}, "timeout_seconds": 2}
+    proc = _run_exec(
+        req,
+        {
+            "ETH_RPC_URL": "http://127.0.0.1:1",
+            "PATH": "",
+        },
+    )
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout)
+    assert payload["error_code"] == "RPC_TRANSPORT_ERROR"
+    assert "cast is required but not installed" in payload["error_message"].lower()
+    assert "install Foundry cast".lower() in str(payload.get("hint", "")).lower()
+
+
 def test_broadcast_remote_error_maps_to_specific_code():
     server, url = _serve([
         {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "nonce too low"}},
@@ -480,6 +496,36 @@ def test_chain_select_outputs_value_for_piping():
         proc = _run_chain(req, {"ETH_RPC_URL": url}, extra_args=["--select", "$.outputs.one.result"])
         assert proc.returncode == 0
         assert proc.stdout.strip() == "0x2a"
+    finally:
+        _stop(server)
+
+
+def test_logs_still_work_when_cast_missing():
+    server, url = _serve(
+        [
+            {"jsonrpc": "2.0", "id": 1, "result": []},
+        ]
+    )
+    try:
+        req = {
+            "filter": {
+                "fromBlock": 1,
+                "toBlock": 1,
+                "address": "0x1111111111111111111111111111111111111111",
+                "topics": [],
+            },
+        }
+        proc = _run_logs(
+            req,
+            {
+                "ETH_RPC_URL": url,
+                "PATH": "",
+            },
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["ok"] is True
+        assert payload["result"] == []
     finally:
         _stop(server)
 

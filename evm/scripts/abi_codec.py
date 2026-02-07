@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from cast_adapter import cast_calldata, cast_decode_output, cast_event_topic0, cast_function_selector
 from transforms import keccak256
 
 HEX_RE = re.compile(r"^0x[0-9a-fA-F]*$")
@@ -364,8 +365,7 @@ def decode_abi(types: list[AbiType], data_hex: str) -> list[Any]:
 
 def function_selector(signature: str) -> str:
     _, _, canonical = parse_function_signature(signature)
-    selector = keccak256(canonical.encode("utf-8"))[:4]
-    return f"0x{selector.hex()}"
+    return cast_function_selector(canonical)
 
 
 def event_topic0(event_signature_or_declaration: str) -> str:
@@ -374,26 +374,36 @@ def event_topic0(event_signature_or_declaration: str) -> str:
         _, _, _, _, canonical = parse_event_declaration(raw)
     else:
         _, _, canonical = parse_function_signature(raw)
-    topic = keccak256(canonical.encode("utf-8"))
-    return f"0x{topic.hex()}"
+    return cast_event_topic0(canonical)
 
 
 def encode_call(signature: str, args: list[Any]) -> dict[str, Any]:
     _, arg_types, canonical = parse_function_signature(signature)
-    calldata = function_selector(canonical) + encode_abi(arg_types, list(args)).hex()
+    if len(arg_types) != len(args):
+        raise ValueError("argument count mismatch for function signature")
+    calldata = cast_calldata(canonical, list(args))
+    selector = function_selector(canonical)
+    if not calldata.startswith(selector):
+        raise ValueError("cast calldata output did not match computed selector")
     return {
         "signature": canonical,
-        "selector": calldata[:10],
+        "selector": selector,
         "calldata": calldata,
     }
 
 
 def decode_output(types_spec: Any, data_hex: str) -> dict[str, Any]:
     types = parse_types(types_spec)
-    decoded = decode_abi(types, data_hex)
+    formatted_types = [format_type(t) for t in types]
+    decoded_lines = cast_decode_output(formatted_types, data_hex)
+    if len(decoded_lines) != len(formatted_types):
+        raise ValueError(
+            "cast decode-abi returned unexpected value count: "
+            f"expected {len(formatted_types)}, got {len(decoded_lines)}"
+        )
     return {
-        "types": [format_type(t) for t in types],
-        "values": decoded,
+        "types": formatted_types,
+        "values": decoded_lines,
     }
 
 

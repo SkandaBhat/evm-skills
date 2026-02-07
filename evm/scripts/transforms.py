@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from cast_adapter import cast_from_wei, cast_namehash
+
 HEX_BYTES_RE = re.compile(r"^0x(?:[0-9a-fA-F]{2})*$")
 HEX_QUANTITY_RE = re.compile(r"^0x[0-9a-fA-F]+$")
 
@@ -132,11 +134,15 @@ def transform_wei_to_eth(value: Any) -> tuple[bool, Any, str]:
     ok, wei, err = _parse_nonnegative_int(value)
     if not ok:
         return False, None, f"wei_to_eth: {err}"
-    whole, frac = divmod(wei, 10**18)
-    if frac == 0:
-        return True, str(whole), ""
-    frac_str = f"{frac:018d}".rstrip("0")
-    return True, f"{whole}.{frac_str}", ""
+    try:
+        rendered = cast_from_wei(str(wei), "eth")
+        if "." in rendered:
+            whole, frac = rendered.split(".", 1)
+            frac = frac.rstrip("0")
+            rendered = whole if not frac else f"{whole}.{frac}"
+        return True, rendered, ""
+    except Exception as cast_err:  # noqa: BLE001
+        return False, None, f"wei_to_eth: {cast_err}"
 
 
 def transform_slice_last_20_bytes_to_address(value: Any) -> tuple[bool, Any, str]:
@@ -157,12 +163,10 @@ def ens_namehash(name: str) -> tuple[bool, Any, str]:
     labels = normalized.split(".")
     if any(not label for label in labels):
         return False, None, "ens_namehash: name has empty labels"
-
-    node = b"\x00" * 32
-    for label in reversed(labels):
-        label_hash = keccak256(label.encode("utf-8"))
-        node = keccak256(node + label_hash)
-    return True, f"0x{node.hex()}", ""
+    try:
+        return True, cast_namehash(normalized), ""
+    except Exception as cast_err:  # noqa: BLE001
+        return False, None, f"ens_namehash: {cast_err}"
 
 
 def apply_transform(name: str, value: Any) -> tuple[bool, Any, str]:
