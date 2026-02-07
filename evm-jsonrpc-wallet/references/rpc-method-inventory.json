@@ -1,0 +1,492 @@
+{
+  "source_repository": "https://github.com/ethereum/execution-apis",
+  "source_ref": "main",
+  "source_commit": "585763b34564202d4611d318006ea1f3efb43616",
+  "generated_at_utc": "2026-02-06T10:42:17.036292Z",
+  "count": 69,
+  "methods": [
+    {
+      "name": "debug_getBadBlocks",
+      "namespace": "debug",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "name": "debug_getRawBlock",
+      "namespace": "debug",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "name": "debug_getRawHeader",
+      "namespace": "debug",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "name": "debug_getRawReceipts",
+      "namespace": "debug",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "name": "debug_getRawTransaction",
+      "namespace": "debug",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "name": "engine_exchangeCapabilities",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/capabilities.yaml"
+      ]
+    },
+    {
+      "name": "engine_exchangeTransitionConfigurationV1",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/transition_configuration.yaml"
+      ]
+    },
+    {
+      "name": "engine_forkchoiceUpdatedV1",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/forkchoice.yaml"
+      ]
+    },
+    {
+      "name": "engine_forkchoiceUpdatedV2",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/forkchoice.yaml"
+      ]
+    },
+    {
+      "name": "engine_forkchoiceUpdatedV3",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/forkchoice.yaml"
+      ]
+    },
+    {
+      "name": "engine_forkchoiceUpdatedV4",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/forkchoice.yaml"
+      ]
+    },
+    {
+      "name": "engine_getBlobsV1",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/blob.yaml"
+      ]
+    },
+    {
+      "name": "engine_getBlobsV2",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/blob.yaml"
+      ]
+    },
+    {
+      "name": "engine_getBlobsV3",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/blob.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadBodiesByHashV1",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadBodiesByHashV2",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadBodiesByRangeV1",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadBodiesByRangeV2",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadV1",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadV2",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadV3",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadV4",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadV5",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_getPayloadV6",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_newPayloadV1",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_newPayloadV2",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_newPayloadV3",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_newPayloadV4",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "engine_newPayloadV5",
+      "namespace": "engine",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "name": "eth_accounts",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "name": "eth_blobBaseFee",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/fee_market.yaml"
+      ]
+    },
+    {
+      "name": "eth_blockNumber",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "name": "eth_call",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/execute.yaml"
+      ]
+    },
+    {
+      "name": "eth_chainId",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "name": "eth_coinbase",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "name": "eth_createAccessList",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/execute.yaml"
+      ]
+    },
+    {
+      "name": "eth_estimateGas",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/execute.yaml"
+      ]
+    },
+    {
+      "name": "eth_feeHistory",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/fee_market.yaml"
+      ]
+    },
+    {
+      "name": "eth_gasPrice",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/fee_market.yaml"
+      ]
+    },
+    {
+      "name": "eth_getBalance",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "name": "eth_getBlockByHash",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "name": "eth_getBlockByNumber",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "name": "eth_getBlockReceipts",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "name": "eth_getBlockTransactionCountByHash",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "name": "eth_getBlockTransactionCountByNumber",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "name": "eth_getCode",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "name": "eth_getFilterChanges",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "name": "eth_getFilterLogs",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "name": "eth_getLogs",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "name": "eth_getProof",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "name": "eth_getStorageAt",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "name": "eth_getTransactionByBlockHashAndIndex",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/transaction.yaml"
+      ]
+    },
+    {
+      "name": "eth_getTransactionByBlockNumberAndIndex",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/transaction.yaml"
+      ]
+    },
+    {
+      "name": "eth_getTransactionByHash",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/transaction.yaml"
+      ]
+    },
+    {
+      "name": "eth_getTransactionCount",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "name": "eth_getTransactionReceipt",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/transaction.yaml"
+      ]
+    },
+    {
+      "name": "eth_getUncleCountByBlockHash",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "name": "eth_getUncleCountByBlockNumber",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "name": "eth_maxPriorityFeePerGas",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/fee_market.yaml"
+      ]
+    },
+    {
+      "name": "eth_newBlockFilter",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "name": "eth_newFilter",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "name": "eth_newPendingTransactionFilter",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "name": "eth_sendRawTransaction",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/submit.yaml"
+      ]
+    },
+    {
+      "name": "eth_sendTransaction",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/submit.yaml"
+      ]
+    },
+    {
+      "name": "eth_sign",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/sign.yaml"
+      ]
+    },
+    {
+      "name": "eth_signTransaction",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/sign.yaml"
+      ]
+    },
+    {
+      "name": "eth_simulateV1",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/execute.yaml"
+      ]
+    },
+    {
+      "name": "eth_syncing",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "name": "eth_uninstallFilter",
+      "namespace": "eth",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    }
+  ]
+}

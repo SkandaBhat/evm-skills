@@ -1,0 +1,775 @@
+{
+  "generated_at_utc": "2026-02-06T10:51:46.453556+00:00",
+  "source_inventory_count": 69,
+  "source_repository": "https://github.com/ethereum/execution-apis",
+  "source_ref": "main",
+  "source_commit": "585763b34564202d4611d318006ea1f3efb43616",
+  "count": 69,
+  "tier_counts": {
+    "read": 40,
+    "operator": 24,
+    "local-sensitive": 3,
+    "broadcast": 2
+  },
+  "entries": [
+    {
+      "method": "debug_getBadBlocks",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "method": "debug_getRawBlock",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "method": "debug_getRawHeader",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "method": "debug_getRawReceipts",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "method": "debug_getRawTransaction",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/debug/getters.yaml"
+      ]
+    },
+    {
+      "method": "engine_exchangeCapabilities",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/capabilities.yaml"
+      ]
+    },
+    {
+      "method": "engine_exchangeTransitionConfigurationV1",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/transition_configuration.yaml"
+      ]
+    },
+    {
+      "method": "engine_forkchoiceUpdatedV1",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/forkchoice.yaml"
+      ]
+    },
+    {
+      "method": "engine_forkchoiceUpdatedV2",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/forkchoice.yaml"
+      ]
+    },
+    {
+      "method": "engine_forkchoiceUpdatedV3",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/forkchoice.yaml"
+      ]
+    },
+    {
+      "method": "engine_forkchoiceUpdatedV4",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/forkchoice.yaml"
+      ]
+    },
+    {
+      "method": "engine_getBlobsV1",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/blob.yaml"
+      ]
+    },
+    {
+      "method": "engine_getBlobsV2",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/blob.yaml"
+      ]
+    },
+    {
+      "method": "engine_getBlobsV3",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/blob.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadBodiesByHashV1",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadBodiesByHashV2",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadBodiesByRangeV1",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadBodiesByRangeV2",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadV1",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadV2",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadV3",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadV4",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadV5",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_getPayloadV6",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_newPayloadV1",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_newPayloadV2",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_newPayloadV3",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_newPayloadV4",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "engine_newPayloadV5",
+      "tier": "operator",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "Execution client control-plane method; requires operator approval.",
+      "sources": [
+        "src/engine/openrpc/methods/payload.yaml"
+      ]
+    },
+    {
+      "method": "eth_accounts",
+      "tier": "local-sensitive",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": false,
+      "notes": "Uses local account authority.",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "method": "eth_blobBaseFee",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/fee_market.yaml"
+      ]
+    },
+    {
+      "method": "eth_blockNumber",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "method": "eth_call",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/execute.yaml"
+      ]
+    },
+    {
+      "method": "eth_chainId",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "method": "eth_coinbase",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "method": "eth_createAccessList",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/execute.yaml"
+      ]
+    },
+    {
+      "method": "eth_estimateGas",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/execute.yaml"
+      ]
+    },
+    {
+      "method": "eth_feeHistory",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/fee_market.yaml"
+      ]
+    },
+    {
+      "method": "eth_gasPrice",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/fee_market.yaml"
+      ]
+    },
+    {
+      "method": "eth_getBalance",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "method": "eth_getBlockByHash",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "method": "eth_getBlockByNumber",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "method": "eth_getBlockReceipts",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "method": "eth_getBlockTransactionCountByHash",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "method": "eth_getBlockTransactionCountByNumber",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "method": "eth_getCode",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "method": "eth_getFilterChanges",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "method": "eth_getFilterLogs",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "method": "eth_getLogs",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "method": "eth_getProof",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "method": "eth_getStorageAt",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "method": "eth_getTransactionByBlockHashAndIndex",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/transaction.yaml"
+      ]
+    },
+    {
+      "method": "eth_getTransactionByBlockNumberAndIndex",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/transaction.yaml"
+      ]
+    },
+    {
+      "method": "eth_getTransactionByHash",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/transaction.yaml"
+      ]
+    },
+    {
+      "method": "eth_getTransactionCount",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/state.yaml"
+      ]
+    },
+    {
+      "method": "eth_getTransactionReceipt",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/transaction.yaml"
+      ]
+    },
+    {
+      "method": "eth_getUncleCountByBlockHash",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "method": "eth_getUncleCountByBlockNumber",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/block.yaml"
+      ]
+    },
+    {
+      "method": "eth_maxPriorityFeePerGas",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/fee_market.yaml"
+      ]
+    },
+    {
+      "method": "eth_newBlockFilter",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "method": "eth_newFilter",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "method": "eth_newPendingTransactionFilter",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    },
+    {
+      "method": "eth_sendRawTransaction",
+      "tier": "broadcast",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "State-changing publish path; requires explicit confirmation.",
+      "sources": [
+        "src/eth/submit.yaml"
+      ]
+    },
+    {
+      "method": "eth_sendTransaction",
+      "tier": "broadcast",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": true,
+      "notes": "State-changing publish path; requires explicit confirmation.",
+      "sources": [
+        "src/eth/submit.yaml"
+      ]
+    },
+    {
+      "method": "eth_sign",
+      "tier": "local-sensitive",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": false,
+      "notes": "Uses local account authority.",
+      "sources": [
+        "src/eth/sign.yaml"
+      ]
+    },
+    {
+      "method": "eth_signTransaction",
+      "tier": "local-sensitive",
+      "enabled": true,
+      "implementation": "adapter",
+      "requires_confirmation": false,
+      "notes": "Uses local account authority.",
+      "sources": [
+        "src/eth/sign.yaml"
+      ]
+    },
+    {
+      "method": "eth_simulateV1",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/execute.yaml"
+      ]
+    },
+    {
+      "method": "eth_syncing",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/client.yaml"
+      ]
+    },
+    {
+      "method": "eth_uninstallFilter",
+      "tier": "read",
+      "enabled": true,
+      "implementation": "proxy",
+      "requires_confirmation": false,
+      "notes": "Read or simulation path.",
+      "sources": [
+        "src/eth/filter.yaml"
+      ]
+    }
+  ]
+}

@@ -17,3 +17,15 @@
 - Added automated tests for discovery, policy, wrapper execution, coverage, and skill validation.
 - Added ready-to-run request examples for read and broadcast execution flows.
 - Added env-only RPC URL behavior (no persistence) and explicit `RPC_URL_REQUIRED` guidance.
+- Added OpenAI Codex skills docs gap check and repository alignment recommendations (`.agents/skills` path and optional `agents/openai.yaml`).
+- Added cross-ecosystem update-pattern research (Codex, Agent Skills, OpenSkills, SkillPort, Claude plugins) with rollout implications for installed snapshots.
+- Added installed-session field findings, including reproducible Foundry proxy-detection panic and required read-only JSON-RPC fallback direction.
+- Removed `evm-cast-wallet` skill package and cast-only docs/plans.
+- Added JSON-RPC method inventory from `ethereum/execution-apis` (`69` methods: `eth=40`, `debug=5`, `engine=24`).
+- Added `evm-jsonrpc-wallet` skill skeleton (JSON-RPC-only, no cast dependency).
+- Added inventory sync script: `evm-jsonrpc-wallet/scripts/sync_execution_apis_inventory.py`.
+- Added JSON-RPC-only implementation plan (`docs/plans/json-rpc-only-skill-plan.md`).
+- Added decision note documenting cast deprecation and JSON-RPC pivot.
+- Added a dedicated JSON-RPC wrapper architecture plan covering module boundaries, request/response contract, policy flow, error taxonomy, retries, and test strategy.
+- Added method manifest generation and a complete user story catalog for agent workflows.
+- Added user story validator enforcing schema, tier/context policy alignment, and optional full method coverage.
