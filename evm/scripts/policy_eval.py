@@ -6,6 +6,8 @@ from typing import Any
 
 from error_map import ERR_METHOD_DISABLED, ERR_METHOD_NOT_IN_MANIFEST, ERR_POLICY_DENIED
 
+MIN_CONFIRMATION_TOKEN_LEN = 8
+
 
 def evaluate_policy(
     manifest_by_method: dict[str, dict[str, Any]],
@@ -67,6 +69,17 @@ def evaluate_policy(
                 "reason": "broadcast method requires confirmation_token",
                 "requires_confirmation": requires_confirmation,
             }
+        if requires_confirmation and len(confirmation) < MIN_CONFIRMATION_TOKEN_LEN:
+            return {
+                "allowed": False,
+                "method": method,
+                "tier": tier,
+                "error_code": ERR_POLICY_DENIED,
+                "reason": (
+                    f"broadcast method requires confirmation_token length >= {MIN_CONFIRMATION_TOKEN_LEN}"
+                ),
+                "requires_confirmation": requires_confirmation,
+            }
 
     if tier == "operator":
         if not bool(context.get("allow_operator", False)):
@@ -85,6 +98,17 @@ def evaluate_policy(
                 "tier": tier,
                 "error_code": ERR_POLICY_DENIED,
                 "reason": "operator method requires confirmation_token",
+                "requires_confirmation": requires_confirmation,
+            }
+        if requires_confirmation and len(confirmation) < MIN_CONFIRMATION_TOKEN_LEN:
+            return {
+                "allowed": False,
+                "method": method,
+                "tier": tier,
+                "error_code": ERR_POLICY_DENIED,
+                "reason": (
+                    f"operator method requires confirmation_token length >= {MIN_CONFIRMATION_TOKEN_LEN}"
+                ),
                 "requires_confirmation": requires_confirmation,
             }
 

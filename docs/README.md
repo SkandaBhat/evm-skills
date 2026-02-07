@@ -23,6 +23,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `docs/learnings/2026-02-06-cast-deprecation-and-json-rpc-shift.md`: Decision log for removing cast and pivoting to JSON-RPC-only skill architecture.
 - `docs/learnings/2026-02-06-user-stories-and-validation.md`: User story catalog and validation model tied to inventory/manifest coverage.
 - `docs/learnings/2026-02-07-evm-wrapper-v0.1.md`: First packaged runtime wrapper implementation for the `evm` skill.
+- `docs/learnings/2026-02-07-v0.2-adapter-hardening.md`: Adapter preflight validation and broadcast error mapping hardening.
 - `docs/data/execution-api-rpc-methods-2026-02-06.json`: Machine-readable inventory of 69 RPC methods.
 
 ### Plans
@@ -36,6 +37,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `evm/scripts/rpc_contract.py`: Request/response contract helpers.
 - `evm/scripts/method_registry.py`: Manifest registry loader.
 - `evm/scripts/policy_eval.py`: Policy gate evaluator.
+- `evm/scripts/adapters.py`: Method-specific preflight validations for adapter methods.
 - `evm/scripts/rpc_transport.py`: JSON-RPC HTTP transport.
 - `evm/scripts/error_map.py`: Stable error codes/messages.
 - `evm/scripts/coverage_check.py`: Inventory/manifest coverage checker.

@@ -17,13 +17,19 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from error_map import (  # noqa: E402
+    ERR_ADAPTER_VALIDATION,
     ERR_INTERNAL,
     ERR_INVALID_REQUEST,
+    ERR_RPC_BROADCAST_ALREADY_KNOWN,
+    ERR_RPC_BROADCAST_INSUFFICIENT_FUNDS,
+    ERR_RPC_BROADCAST_NONCE_TOO_LOW,
+    ERR_RPC_BROADCAST_UNDERPRICED,
     ERR_RPC_REMOTE,
     ERR_RPC_TIMEOUT,
     ERR_RPC_URL_REQUIRED,
     RPC_URL_REQUIRED_MESSAGE,
 )
+from adapters import validate_adapter_preflight  # noqa: E402
 from method_registry import load_manifest_by_method, load_json  # noqa: E402
 from policy_eval import evaluate_policy  # noqa: E402
 from rpc_contract import (  # noqa: E402
@@ -98,6 +104,22 @@ def _print_error(
     print(_json_dump(payload, pretty=pretty))
 
 
+def _map_broadcast_remote_error(rpc_response: dict[str, Any]) -> str:
+    err = rpc_response.get("error")
+    if not isinstance(err, dict):
+        return ERR_RPC_REMOTE
+    message = str(err.get("message", "")).lower()
+    if "already known" in message:
+        return ERR_RPC_BROADCAST_ALREADY_KNOWN
+    if "nonce too low" in message:
+        return ERR_RPC_BROADCAST_NONCE_TOO_LOW
+    if "replacement transaction underpriced" in message or "underpriced" in message:
+        return ERR_RPC_BROADCAST_UNDERPRICED
+    if "insufficient funds" in message:
+        return ERR_RPC_BROADCAST_INSUFFICIENT_FUNDS
+    return ERR_RPC_REMOTE
+
+
 def cmd_exec(args: argparse.Namespace) -> int:
     manifest_path = Path(args.manifest).resolve()
     if not manifest_path.exists():
@@ -149,6 +171,22 @@ def cmd_exec(args: argparse.Namespace) -> int:
             request=req,
         )
         return 4
+
+    method_entry = manifest_by_method.get(method, {})
+    implementation = str(method_entry.get("implementation", "proxy"))
+    if implementation == "adapter":
+        adapter_ok, adapter_error = validate_adapter_preflight(method, req.get("params", []))
+        if not adapter_ok:
+            _print_error(
+                method=method,
+                status="error",
+                code=ERR_ADAPTER_VALIDATION,
+                message=adapter_error,
+                pretty=not args.compact,
+                policy=policy,
+                request=req,
+            )
+            return 2
 
     execution_env = build_execution_env(req)
     rpc_url = str(execution_env.get("ETH_RPC_URL", "")).strip()
@@ -202,10 +240,15 @@ def cmd_exec(args: argparse.Namespace) -> int:
 
     rpc_response = transport["rpc_response"]
     if isinstance(rpc_response, dict) and "error" in rpc_response:
+        remote_code = (
+            _map_broadcast_remote_error(rpc_response)
+            if policy.get("tier") == "broadcast"
+            else ERR_RPC_REMOTE
+        )
         _print_error(
             method=method,
             status="error",
-            code=ERR_RPC_REMOTE,
+            code=remote_code,
             message="rpc returned an error response",
             pretty=not args.compact,
             policy=policy,

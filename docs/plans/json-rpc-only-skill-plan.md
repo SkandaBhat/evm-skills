@@ -7,10 +7,16 @@ Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `
 - Completed:
   - Phase 1 (inventory/scaffolding)
   - Phase 2 (core runtime wrapper in `evm/scripts/evm_rpc.py`)
+  - Phase 3 (`v0.2` adapter hardening for local-sensitive and broadcast methods)
   - method manifest + story validation tooling
 - Remaining:
-  - deeper method-specific adapters for sensitive/operator paths
+  - optional deeper operator (`engine_*`) method-specific validation
   - CI wiring and release hardening
+
+## Version roadmap
+- `v0.1` (shipped): JSON-RPC wrapper baseline and policy-first execution.
+- `v0.2` (shipped): adapter validation for `eth_accounts`, `eth_sign`, `eth_signTransaction`, `eth_sendRawTransaction`, `eth_sendTransaction`, plus broadcast-specific remote error mapping.
+- `v0.3`: dropped (not planned). Any additional operator hardening is backlog work without a version label.
 
 ## Scope baseline
 - Source repository: <https://github.com/ethereum/execution-apis>
@@ -49,9 +55,9 @@ Detailed module-level architecture lives in:
      - `couldnt find an rpc url. give me an rpc url so i can add it to env.`
    - Never auto-select public RPC endpoints.
 5. Method adapters
-   - Phase 1: generic pass-through for `eth_*`/`debug_*`.
-   - Phase 2: stricter adapter behavior and validation for sensitive methods.
-   - Phase 3: explicit handling for `engine_*` methods and operator gating.
+  - Phase 1: generic pass-through for `eth_*`/`debug_*`.
+  - Phase 2: stricter adapter behavior and validation for sensitive methods.
+  - Additional `engine_*` adapter hardening remains optional backlog work.
 
 ## Coverage definition
 `coverage = implemented + intentionally_denied_with_reason`
@@ -72,14 +78,19 @@ Every method in inventory must have one of:
 2. Implement policy layer and standardized errors.
 3. Implement explicit RPC URL enforcement.
 
-### Phase 3: 100% method mapping
+### Phase 3: Adapter hardening (`v0.2`)
+1. Implement method-specific validation for local-sensitive/broadcast methods.
+2. Add broadcast-specific remote error mapping.
+3. Add integration tests for adapter behavior.
+
+### Phase 4: 100% method mapping
 1. Add method manifest with tier and support status for all `69` methods.
 2. Mark each method as:
    - `implemented`
    - `denied` with reason code
 3. Add machine-checked coverage report.
 
-### Phase 4: Test and validation
+### Phase 5: Test and validation
 1. Unit tests
    - request validation
    - policy gating
@@ -94,7 +105,7 @@ Every method in inventory must have one of:
    - validate `references/user-stories.json` against inventory + manifest
    - fail CI if required story coverage threshold is not met
 
-### Phase 5: Packaging and rollout
+### Phase 6: Packaging and rollout
 1. Place skill under `.agents/skills/evm` for Codex repo discovery.
 2. Keep path-install instructions for clients that install snapshots.
 3. Publish update workflow:

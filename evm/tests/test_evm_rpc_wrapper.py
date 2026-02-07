@@ -96,6 +96,57 @@ def test_broadcast_denied_without_confirmation():
     assert payload["error_code"] == "POLICY_DENIED"
 
 
+def test_broadcast_denied_with_short_confirmation_token():
+    req = {
+        "method": "eth_sendRawTransaction",
+        "params": ["0x0102"],
+        "context": {"allow_broadcast": True, "confirmation_token": "short"},
+        "timeout_seconds": 2,
+    }
+    proc = _run_exec(req, {"ETH_RPC_URL": "http://127.0.0.1:1"})
+    assert proc.returncode == 4
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "denied"
+    assert payload["error_code"] == "POLICY_DENIED"
+    assert "length >=" in payload["error_message"]
+
+
+def test_adapter_validation_eth_accounts_rejects_params():
+    req = {
+        "method": "eth_accounts",
+        "params": ["unexpected"],
+        "context": {"allow_local_sensitive": True},
+        "timeout_seconds": 2,
+    }
+    proc = _run_exec(req, {"ETH_RPC_URL": "http://127.0.0.1:1"})
+    assert proc.returncode == 2
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "error"
+    assert payload["error_code"] == "ADAPTER_VALIDATION_FAILED"
+
+
+def test_adapter_validation_eth_sendtransaction_rejects_mixed_fee_mode():
+    req = {
+        "method": "eth_sendTransaction",
+        "params": [
+            {
+                "from": "0x1111111111111111111111111111111111111111",
+                "to": "0x2222222222222222222222222222222222222222",
+                "gasPrice": "0x1",
+                "maxFeePerGas": "0x2",
+            }
+        ],
+        "context": {"allow_broadcast": True, "confirmation_token": "confirm-ok"},
+        "timeout_seconds": 2,
+    }
+    proc = _run_exec(req, {"ETH_RPC_URL": "http://127.0.0.1:1"})
+    assert proc.returncode == 2
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "error"
+    assert payload["error_code"] == "ADAPTER_VALIDATION_FAILED"
+    assert "gasPrice" in payload["error_message"]
+
+
 def test_rpc_success_response():
     server, url = _serve_once({"jsonrpc": "2.0", "id": 7, "result": "0x1234"})
     try:
@@ -122,5 +173,26 @@ def test_rpc_error_response_maps_to_remote_error():
         payload = json.loads(proc.stdout)
         assert payload["error_code"] == "RPC_REMOTE_ERROR"
         assert payload["status"] == "error"
+    finally:
+        server.server_close()
+
+
+def test_broadcast_remote_error_maps_to_specific_code():
+    server, url = _serve_once(
+        {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "nonce too low"}}
+    )
+    try:
+        req = {
+            "method": "eth_sendRawTransaction",
+            "params": ["0x0102"],
+            "id": 1,
+            "context": {"allow_broadcast": True, "confirmation_token": "confirm-ok"},
+            "timeout_seconds": 2,
+        }
+        proc = _run_exec(req, {"ETH_RPC_URL": url})
+        assert proc.returncode == 1
+        payload = json.loads(proc.stdout)
+        assert payload["status"] == "error"
+        assert payload["error_code"] == "RPC_BROADCAST_NONCE_TOO_LOW"
     finally:
         server.server_close()

@@ -13,12 +13,17 @@ Define a robust wrapper architecture for `evm` that:
   - `evm/scripts/rpc_contract.py`
   - `evm/scripts/method_registry.py`
   - `evm/scripts/policy_eval.py`
+  - `evm/scripts/adapters.py`
   - `evm/scripts/rpc_transport.py`
   - `evm/scripts/error_map.py`
   - `evm/scripts/coverage_check.py`
 - Implemented tests:
   - `evm/tests/test_evm_rpc_wrapper.py`
   - `evm/tests/test_user_story_validation.py`
+- `v0.2` shipped:
+  - adapter preflight validation for local-sensitive and broadcast methods
+  - broadcast-specific remote error mapping
+  - confirmation token minimum-length enforcement for broadcast/operator methods
 
 ## Design principles
 1. Single responsibility per module.
@@ -130,18 +135,21 @@ Define a robust wrapper architecture for `evm` that:
    - Direct pass-through for methods where wrapper-level validation is sufficient.
 2. `adapter` path:
    - Method-specific pre/post checks for sensitive or complex methods.
-   - First adapters:
+   - Implemented adapters:
+     - `eth_accounts`
+     - `eth_sign`
+     - `eth_signTransaction`
      - `eth_sendTransaction`
      - `eth_sendRawTransaction`
-     - `engine_*`
+   - `engine_*` preflight hardening is optional backlog.
 3. `deny` path:
    - Explicit unsupported/disabled states with stable reason code.
 
 ## Policy model
 1. `read`: allow by default.
 2. `local-sensitive`: require `allow_local_sensitive=true`.
-3. `broadcast`: require `allow_broadcast=true` and `confirmation_token`.
-4. `operator`: require `allow_operator=true` and `confirmation_token`.
+3. `broadcast`: require `allow_broadcast=true` and `confirmation_token` length `>= 8`.
+4. `operator`: require `allow_operator=true` and `confirmation_token` length `>= 8`.
 5. Unknown method: deny with `METHOD_NOT_IN_MANIFEST`.
 
 ## Error taxonomy
@@ -150,11 +158,14 @@ Internal wrapper codes:
 2. `METHOD_NOT_IN_MANIFEST`
 3. `METHOD_DISABLED`
 4. `POLICY_DENIED`
-5. `RPC_URL_REQUIRED`
-6. `RPC_TRANSPORT_ERROR`
-7. `RPC_TIMEOUT`
-8. `RPC_REMOTE_ERROR` (JSON-RPC error object returned)
-9. `INTERNAL_ERROR`
+5. `ADAPTER_VALIDATION_FAILED`
+6. `RPC_URL_REQUIRED`
+7. `RPC_TRANSPORT_ERROR`
+8. `RPC_TIMEOUT`
+9. `RPC_REMOTE_ERROR` (JSON-RPC error object returned)
+10. `RPC_BROADCAST_NONCE_TOO_LOW` / `RPC_BROADCAST_ALREADY_KNOWN` /
+    `RPC_BROADCAST_UNDERPRICED` / `RPC_BROADCAST_INSUFFICIENT_FUNDS`
+11. `INTERNAL_ERROR`
 
 JSON-RPC remote errors remain available under `rpc_response.error`.
 
@@ -192,8 +203,9 @@ JSON-RPC remote errors remain available under `rpc_response.error`.
 ## Milestones
 1. M1: Contracts + registry + policy + manifest + coverage checker.
 2. M2: `evm_rpc.py exec` with proxy-mode for `read` methods.
-3. M3: Broadcast/operator gating + adapters for sensitive methods.
-4. M4: Full inventory mapping + CI test matrix + docs updates.
+3. M3 (`v0.2`): local-sensitive/broadcast adapters + broadcast error mapping.
+4. M4: CI test matrix + release hardening.
+5. M5 (optional backlog): deeper `engine_*` payload preflight validation.
 
 ## Definition of done
 1. Every inventory method has manifest entry.

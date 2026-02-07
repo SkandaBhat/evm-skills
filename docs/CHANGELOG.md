@@ -8,6 +8,11 @@
 - Added wrapper runtime tests (`evm/tests/test_evm_rpc_wrapper.py`).
 - Added runtime implementation learning note (`docs/learnings/2026-02-07-evm-wrapper-v0.1.md`).
 - Updated skill and plans to reflect v0.1 runtime availability and current milestone status.
+- Implemented `v0.2` adapter hardening (`evm/scripts/adapters.py`) for local-sensitive and broadcast methods.
+- Added broadcast-specific remote error mapping for common transaction publish failures.
+- Enforced minimum confirmation token length for broadcast/operator gated calls.
+- Updated plans to mark `v0.3` as dropped; additional `engine_*` hardening moved to optional backlog.
+- Added `v0.2` learning note (`docs/learnings/2026-02-07-v0.2-adapter-hardening.md`).
 
 ## 2026-02-06
 - Initialized project documentation structure under `docs/`.

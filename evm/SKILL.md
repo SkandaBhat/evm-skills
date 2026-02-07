@@ -31,11 +31,17 @@ Use this skill for EVM tasks through Ethereum JSON-RPC only.
 
 ## Current status
 - Runtime wrapper is available at `scripts/evm_rpc.py`.
+- `v0.2` adapter hardening is implemented for:
+  - `eth_accounts`
+  - `eth_sign`
+  - `eth_signTransaction`
+  - `eth_sendRawTransaction`
+  - `eth_sendTransaction`
 - Coverage and policy tooling:
   - `scripts/build_method_manifest.py`
   - `scripts/coverage_check.py`
   - `scripts/validate_user_stories.py`
-- Full method adapters beyond proxy-mode are tracked in `docs/plans/json-rpc-only-skill-plan.md`.
+- Additional optional `engine_*` payload preflight hardening is tracked as backlog.
 
 ## High-value commands
 - List supported methods:
