@@ -37,6 +37,17 @@ Use this skill for EVM tasks through Ethereum JSON-RPC only.
   - `eth_signTransaction`
   - `eth_sendRawTransaction`
   - `eth_sendTransaction`
+- `v0.2.x` chain usability is implemented:
+  - `chain` and `batch` commands for multi-step workflows
+  - template substitution across prior step outputs (`{{step_id.path}}`)
+  - output extraction flags (`--result-only`, `--select`)
+  - local transform helpers:
+    - `hex_to_int`
+    - `wei_to_eth`
+    - `slice_last_20_bytes_to_address`
+  - convenience commands:
+    - `ens resolve <name>`
+    - `balance <name-or-address> --at <tag>`
 - Coverage and policy tooling:
   - `scripts/build_method_manifest.py`
   - `scripts/coverage_check.py`
@@ -48,6 +59,15 @@ Use this skill for EVM tasks through Ethereum JSON-RPC only.
   - `python3 scripts/evm_rpc.py supported-methods --manifest references/method-manifest.json`
 - Execute one JSON-RPC call through policy wrapper:
   - `python3 scripts/evm_rpc.py exec --manifest references/method-manifest.json --request-json '{"method":"eth_blockNumber","params":[],"context":{}}'`
+- Execute a multi-step workflow:
+  - `python3 scripts/evm_rpc.py chain --manifest references/method-manifest.json --request-json '{"steps":[{"id":"b","method":"eth_blockNumber","params":[]},{"id":"n","transform":"hex_to_int","input":"{{b.result}}"}]}'`
+- Balance convenience:
+  - `python3 scripts/evm_rpc.py balance vitalik.eth --manifest references/method-manifest.json`
+- ENS convenience:
+  - `python3 scripts/evm_rpc.py ens resolve vitalik.eth --manifest references/method-manifest.json`
+- Extract result for piping:
+  - `python3 scripts/evm_rpc.py exec --manifest references/method-manifest.json --request-json '{"method":"eth_blockNumber","params":[]}' --result-only`
+  - `python3 scripts/evm_rpc.py chain --manifest references/method-manifest.json --request-json '{"steps":[{"id":"b","method":"eth_blockNumber","params":[]}]}' --select '$.outputs.b.result'`
 - Check manifest coverage:
   - `python3 scripts/coverage_check.py --inventory references/rpc-method-inventory.json --manifest references/method-manifest.json`
 

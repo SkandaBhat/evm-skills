@@ -8,6 +8,7 @@ Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `
   - Phase 1 (inventory/scaffolding)
   - Phase 2 (core runtime wrapper in `evm/scripts/evm_rpc.py`)
   - Phase 3 (`v0.2` adapter hardening for local-sensitive and broadcast methods)
+  - Phase 4 (`v0.2.x` chain usability expansion: `chain`/`batch`, output selectors, transforms, ENS/balance convenience commands)
   - method manifest + story validation tooling
 - Remaining:
   - optional deeper operator (`engine_*`) method-specific validation
@@ -16,6 +17,7 @@ Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `
 ## Version roadmap
 - `v0.1` (shipped): JSON-RPC wrapper baseline and policy-first execution.
 - `v0.2` (shipped): adapter validation for `eth_accounts`, `eth_sign`, `eth_signTransaction`, `eth_sendRawTransaction`, `eth_sendTransaction`, plus broadcast-specific remote error mapping.
+- `v0.2.x` (shipped): chain/batch execution, templated multi-step workflows, output selectors, local transforms, ENS/balance convenience commands.
 - `v0.3`: dropped (not planned). Any additional operator hardening is backlog work without a version label.
 
 ## Scope baseline
@@ -34,6 +36,7 @@ Ship an agent skill that provides 100% coverage of JSON-RPC methods defined in `
 ## Architecture
 Detailed module-level architecture lives in:
 - `docs/plans/json-rpc-wrapper-architecture.md`
+- `docs/plans/chain-usability-expansion.md`
 
 1. Method registry
    - Generated inventory from `execution-apis` YAML definitions.
@@ -90,7 +93,14 @@ Every method in inventory must have one of:
    - `denied` with reason code
 3. Add machine-checked coverage report.
 
-### Phase 5: Test and validation
+### Phase 5: Chain usability expansion (`v0.2.x`)
+1. Implement chain runner for multi-step JSON-in/JSON-out workflows.
+2. Add template substitution from prior step results (`{{step_id.path}}`).
+3. Add output extraction flags (`--result-only`, `--select`).
+4. Add local transform helpers for common post-processing.
+5. Add ENS + balance convenience commands through same policy-enforced runtime.
+
+### Phase 6: Test and validation
 1. Unit tests
    - request validation
    - policy gating
@@ -105,7 +115,7 @@ Every method in inventory must have one of:
    - validate `references/user-stories.json` against inventory + manifest
    - fail CI if required story coverage threshold is not met
 
-### Phase 6: Packaging and rollout
+### Phase 7: Packaging and rollout
 1. Place skill under `.agents/skills/evm` for Codex repo discovery.
 2. Keep path-install instructions for clients that install snapshots.
 3. Publish update workflow:

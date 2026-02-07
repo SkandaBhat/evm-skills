@@ -13,6 +13,10 @@
 - Enforced minimum confirmation token length for broadcast/operator gated calls.
 - Updated plans to mark `v0.3` as dropped; additional `engine_*` hardening moved to optional backlog.
 - Added `v0.2` learning note (`docs/learnings/2026-02-07-v0.2-adapter-hardening.md`).
+- Added detailed chain usability plan (`docs/plans/chain-usability-expansion.md`) for `chain`/`batch`, templating, output selectors, transforms, and convenience commands.
+- Implemented and documented `v0.2.x` chain usability expansion and validation outcomes (`docs/learnings/2026-02-07-chain-usability-expansion.md`).
+- Updated core plans/architecture docs to include shipped multi-step runtime and output shaping.
+- Updated docs index to include new plan/learning entries and `transforms.py` module mapping.
 
 ## 2026-02-06
 - Initialized project documentation structure under `docs/`.

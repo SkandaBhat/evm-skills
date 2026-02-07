@@ -24,11 +24,13 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `docs/learnings/2026-02-06-user-stories-and-validation.md`: User story catalog and validation model tied to inventory/manifest coverage.
 - `docs/learnings/2026-02-07-evm-wrapper-v0.1.md`: First packaged runtime wrapper implementation for the `evm` skill.
 - `docs/learnings/2026-02-07-v0.2-adapter-hardening.md`: Adapter preflight validation and broadcast error mapping hardening.
+- `docs/learnings/2026-02-07-chain-usability-expansion.md`: Chain/batch runtime expansion, output selectors, transforms, and ENS/balance convenience commands.
 - `docs/data/execution-api-rpc-methods-2026-02-06.json`: Machine-readable inventory of 69 RPC methods.
 
 ### Plans
 - `docs/plans/json-rpc-only-skill-plan.md`: End-to-end implementation plan for 100% JSON-RPC method coverage.
 - `docs/plans/json-rpc-wrapper-architecture.md`: Detailed wrapper architecture (modules, contracts, policy, errors, testing).
+- `docs/plans/chain-usability-expansion.md`: Detailed plan for multi-step chain execution and agent usability improvements.
 
 ### Skill Package
 - `evm/SKILL.md`: JSON-RPC-only skill entrypoint.
@@ -38,6 +40,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `evm/scripts/method_registry.py`: Manifest registry loader.
 - `evm/scripts/policy_eval.py`: Policy gate evaluator.
 - `evm/scripts/adapters.py`: Method-specific preflight validations for adapter methods.
+- `evm/scripts/transforms.py`: Local transform helpers and ENS namehash support.
 - `evm/scripts/rpc_transport.py`: JSON-RPC HTTP transport.
 - `evm/scripts/error_map.py`: Stable error codes/messages.
 - `evm/scripts/coverage_check.py`: Inventory/manifest coverage checker.

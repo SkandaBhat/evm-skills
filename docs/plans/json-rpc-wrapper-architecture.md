@@ -14,6 +14,7 @@ Define a robust wrapper architecture for `evm` that:
   - `evm/scripts/method_registry.py`
   - `evm/scripts/policy_eval.py`
   - `evm/scripts/adapters.py`
+  - `evm/scripts/transforms.py`
   - `evm/scripts/rpc_transport.py`
   - `evm/scripts/error_map.py`
   - `evm/scripts/coverage_check.py`
@@ -24,6 +25,11 @@ Define a robust wrapper architecture for `evm` that:
   - adapter preflight validation for local-sensitive and broadcast methods
   - broadcast-specific remote error mapping
   - confirmation token minimum-length enforcement for broadcast/operator methods
+- `v0.2.x` shipped:
+  - chain/batch multi-step execution with template substitution
+  - output extraction modes (`--result-only`, `--select`)
+  - transform helpers (`hex_to_int`, `wei_to_eth`, `slice_last_20_bytes_to_address`)
+  - convenience commands (`ens resolve`, `balance`)
 
 ## Design principles
 1. Single responsibility per module.
@@ -46,6 +52,10 @@ Define a robust wrapper architecture for `evm` that:
    - CLI entrypoint.
    - Subcommands:
      - `exec`
+     - `chain`
+     - `batch`
+     - `ens resolve`
+     - `balance`
      - `supported-methods`
      - `manifest-summary`
 2. `rpc_contract.py`
@@ -56,11 +66,13 @@ Define a robust wrapper architecture for `evm` that:
    - Evaluates tier gates and confirmation requirements.
 5. `rpc_transport.py`
    - HTTP JSON-RPC client with timeout/retry policy.
-6. `error_map.py`
+6. `transforms.py`
+   - Local transform helpers and ENS namehash helper.
+7. `error_map.py`
    - Stable internal error taxonomy and JSON-RPC mapping.
-7. `coverage_check.py`
+8. `coverage_check.py`
    - Verifies inventory-to-manifest completeness.
-8. `sync_execution_apis_inventory.py`
+9. `sync_execution_apis_inventory.py`
    - Already present, keeps inventory fresh.
 
 ## Data files
@@ -119,6 +131,33 @@ Define a robust wrapper architecture for `evm` that:
 }
 ```
 
+### Chain request
+```json
+{
+  "steps": [
+    {"id": "a", "method": "eth_blockNumber", "params": []},
+    {"id": "b", "transform": "hex_to_int", "input": "{{a.result}}"}
+  ],
+  "context_defaults": {},
+  "env": {"ETH_RPC_URL": "https://..."},
+  "timeout_seconds": 20
+}
+```
+
+### Chain response
+```json
+{
+  "method": "chain",
+  "status": "ok|error|denied|timeout",
+  "ok": true,
+  "failed_step_id": null,
+  "steps_executed": 2,
+  "steps": [],
+  "outputs": {},
+  "final_result": 123
+}
+```
+
 ## Execution flow
 1. Parse request JSON.
 2. Validate request schema.
@@ -129,6 +168,15 @@ Define a robust wrapper architecture for `evm` that:
 7. Build JSON-RPC payload and send.
 8. Normalize success/error into stable wrapper response.
 9. Emit deterministic JSON output.
+
+For `chain`:
+1. Parse and validate chain request.
+2. Resolve `{{step.path}}` templates from prior step outputs.
+3. Execute each step via:
+   - shared RPC runner (`run_rpc_request`) for RPC steps
+   - local transform runner for transform steps
+4. Stop at first failed step and return nonzero code deterministically.
+5. Emit one aggregate JSON response with all executed step payloads.
 
 ## Method handling strategy
 1. `proxy` path:
@@ -175,6 +223,13 @@ JSON-RPC remote errors remain available under `rpc_response.error`.
 3. Max retries: 2 with bounded backoff (e.g., 150ms, 400ms).
 4. No retries for non-idempotent broadcast methods unless explicitly enabled.
 
+## Output modes
+1. `--compact`: compact JSON output.
+2. `--result-only`: print only `result` (`exec`) or `final_result` (`chain`) for successful calls.
+3. `--select <jsonpath-lite>`:
+   - supports root `$`, `.key`, `[index]`.
+   - returns selector extraction for direct piping.
+
 ## Observability
 1. Include `duration_ms` and request correlation `id`.
 2. Include policy decision block for all outcomes.
@@ -204,8 +259,9 @@ JSON-RPC remote errors remain available under `rpc_response.error`.
 1. M1: Contracts + registry + policy + manifest + coverage checker.
 2. M2: `evm_rpc.py exec` with proxy-mode for `read` methods.
 3. M3 (`v0.2`): local-sensitive/broadcast adapters + broadcast error mapping.
-4. M4: CI test matrix + release hardening.
-5. M5 (optional backlog): deeper `engine_*` payload preflight validation.
+4. M4 (`v0.2.x`): chain/batch, template resolution, output selectors, transforms, ENS/balance convenience commands.
+5. M5: CI test matrix + release hardening.
+6. M6 (optional backlog): deeper `engine_*` payload preflight validation.
 
 ## Definition of done
 1. Every inventory method has manifest entry.
