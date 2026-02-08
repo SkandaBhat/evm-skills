@@ -11,6 +11,7 @@ This repo provides an `evm` skill with deterministic, policy-first commands for:
 6. simulation preflight,
 7. trace negotiation,
 8. high-level analytics commands (`analytics dex-swap-flow`, `analytics factory-new-pools`).
+9. block-level arbitrage pattern detection (`analytics arbitrage-patterns`).
 
 ## Runtime Requirements
 1. `python3`
@@ -95,6 +96,11 @@ Return token0/token1 metadata, per-swap rows, and net pool flow summary.
 ```text
 Using the evm skill analytics factory-new-pools command, find new pools created by this factory over the last 24h.
 Return only pool address, token0, token1, and tx hash.
+```
+
+```text
+Using the evm skill analytics arbitrage-patterns command, inspect the latest Ethereum block for arbitrage-like swap routes.
+Return candidate tx hashes, inferred token paths, and reasons.
 ```
 
 ### 3) General prompt pattern

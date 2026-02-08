@@ -10,22 +10,24 @@ Add first-class, searcher-focused analytics commands on top of the existing `evm
 Target commands:
 1. `analytics dex-swap-flow`
 2. `analytics factory-new-pools`
-3. `analytics token-bought-never-sold`
-4. `analytics token-largest-swaps`
-5. `analytics mev-sandwich-around`
-6. `analytics quote-compare`
-7. `analytics pools-reserve-scan`
-8. `analytics tx-trace-summary`
-9. `analytics gas-effective-paid`
-10. `analytics simulate-preflight`
-11. `analytics token-transfer-spike`
-12. `analytics flows-track`
+3. `analytics arbitrage-patterns`
+4. `analytics token-bought-never-sold`
+5. `analytics token-largest-swaps`
+6. `analytics mev-sandwich-around`
+7. `analytics quote-compare`
+8. `analytics pools-reserve-scan`
+9. `analytics tx-trace-summary`
+10. `analytics gas-effective-paid`
+11. `analytics simulate-preflight`
+12. `analytics token-transfer-spike`
+13. `analytics flows-track`
 
-## Status (2026-02-07)
+## Status (2026-02-08)
 Shipped:
 1. `analytics dex-swap-flow` (Uniswap V2 pool flow scan)
 2. `analytics factory-new-pools` (Uniswap V2/V3 factory creation scans)
-3. P0 foundations:
+3. `analytics arbitrage-patterns` (single-block arbitrage-like route classification on Uniswap V2/V3 swap logs)
+4. P0 foundations:
    - event/ABI registry (`evm/scripts/analytics_registry.py`)
    - block-range resolver with `--last-blocks` and `--since` (`evm/scripts/analytics_time_range.py`)
    - resumable log scanner wrapper (`evm/scripts/analytics_scanner.py`)
@@ -60,4 +62,3 @@ Each analytics command should emit:
    - aggregate totals,
    - checkpoint behavior.
 3. Regression tests that non-analytics commands still run when `cast` is missing in PATH at startup.
-

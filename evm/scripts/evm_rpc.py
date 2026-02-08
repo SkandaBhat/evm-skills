@@ -57,6 +57,7 @@ from analytics_registry import (  # noqa: E402
     UNISWAP_V2_TOKEN1_SELECTOR,
     UNISWAP_V3_POOL_CREATED_EVENT,
     UNISWAP_V3_POOL_CREATED_TOPIC0,
+    UNISWAP_V3_SWAP_TOPIC0,
 )
 from analytics_scanner import scan_logs  # noqa: E402
 from analytics_time_range import resolve_block_window  # noqa: E402
@@ -100,6 +101,15 @@ KNOWN_EVENT_SIGNATURES: dict[str, str] = {
 ERC20_TRANSFER_EVENT_DECL = "Transfer(address indexed from,address indexed to,uint256 value)"
 # Fixed keccak256("Transfer(address,address,uint256)") topic0.
 ERC20_TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+ARBITRAGE_KNOWN_SYMBOLS: dict[str, str] = {
+    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": "WETH",
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": "USDC",
+    "0xdac17f958d2ee523a2206206994597c13d831ec7": "USDT",
+    "0x6b175474e89094c44da98b954eedeac495271d0f": "DAI",
+    "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": "WBTC",
+    "0xae7ab96520de3a18e5e111b5eaab095312d7fe84": "stETH",
+    "0x7f39c581f595b53c5cb6a5f1a9f8da6c935e2ca0": "wstETH",
+}
 
 
 def _json_dump(payload: Any, pretty: bool = True) -> str:
@@ -2717,6 +2727,622 @@ def cmd_analytics_factory_new_pools(args: argparse.Namespace) -> int:
     return 0
 
 
+def _analytics_parse_block_tag(raw_block: str | None) -> tuple[bool, str, str]:
+    block_tag = str(raw_block or "latest").strip().lower()
+    if not block_tag:
+        return True, "latest", ""
+    if block_tag in {"latest", "earliest", "pending", "safe", "finalized"}:
+        return True, block_tag, ""
+    try:
+        block_number = parse_nonnegative_quantity_str(block_tag)
+    except Exception:  # noqa: BLE001
+        return (
+            False,
+            "",
+            "block must be latest/earliest/pending/safe/finalized or a non-negative block number",
+        )
+    return True, hex(block_number), ""
+
+
+def _analytics_decode_uint256_word(word_hex: str) -> tuple[bool, int]:
+    if not isinstance(word_hex, str) or len(word_hex) != 64:
+        return False, 0
+    try:
+        return True, int(word_hex, 16)
+    except Exception:  # noqa: BLE001
+        return False, 0
+
+
+def _analytics_decode_int256_word(word_hex: str) -> tuple[bool, int]:
+    ok, as_uint = _analytics_decode_uint256_word(word_hex)
+    if not ok:
+        return False, 0
+    if as_uint >= 2**255:
+        return True, as_uint - 2**256
+    return True, as_uint
+
+
+def _analytics_token_label(token: str) -> str:
+    as_lower = str(token).lower()
+    symbol = ARBITRAGE_KNOWN_SYMBOLS.get(as_lower)
+    if symbol:
+        return symbol
+    if len(as_lower) < 10:
+        return as_lower
+    return f"{as_lower[:6]}...{as_lower[-4:]}"
+
+
+def _analytics_format_path(tokens: list[str]) -> str:
+    return " -> ".join(_analytics_token_label(token) for token in tokens)
+
+
+def _analytics_fetch_pool_tokens_for_arbitrage(
+    *,
+    pool: str,
+    block_tag: str,
+    execute_rpc: Any,
+) -> tuple[int, dict[str, Any], tuple[str | None, str | None]]:
+    rc0, cause0, token0_raw = _analytics_eth_call_result(
+        to=pool,
+        data=UNISWAP_V2_TOKEN0_SELECTOR,
+        block_tag=block_tag,
+        execute_rpc=execute_rpc,
+    )
+    if rc0 != 0 or token0_raw is None:
+        payload = _wrap_stage_failure(
+            "analytics.arbitrage_patterns",
+            f"token0() pool {pool}",
+            cause0 or {},
+        )
+        return rc0, payload, (None, None)
+
+    rc1, cause1, token1_raw = _analytics_eth_call_result(
+        to=pool,
+        data=UNISWAP_V2_TOKEN1_SELECTOR,
+        block_tag=block_tag,
+        execute_rpc=execute_rpc,
+    )
+    if rc1 != 0 or token1_raw is None:
+        payload = _wrap_stage_failure(
+            "analytics.arbitrage_patterns",
+            f"token1() pool {pool}",
+            cause1 or {},
+        )
+        return rc1, payload, (None, None)
+
+    ok0, token0, err0 = _analytics_word_to_address(token0_raw)
+    if not ok0:
+        payload = _build_error_payload(
+            method="analytics.arbitrage_patterns",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=f"token0 decode failed for pool {pool}: {err0}",
+        )
+        return 2, payload, (None, None)
+
+    ok1, token1, err1 = _analytics_word_to_address(token1_raw)
+    if not ok1:
+        payload = _build_error_payload(
+            method="analytics.arbitrage_patterns",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=f"token1 decode failed for pool {pool}: {err1}",
+        )
+        return 2, payload, (None, None)
+
+    return 0, {}, (token0.lower(), token1.lower())
+
+
+def _analytics_decode_swap_for_arbitrage(
+    *,
+    log_item: dict[str, Any],
+    topic0: str,
+    pool: str,
+    token0: str,
+    token1: str,
+    log_index: int,
+) -> tuple[bool, dict[str, Any] | None]:
+    data = log_item.get("data")
+    if not isinstance(data, str) or not data.startswith("0x"):
+        return False, None
+    body = data[2:]
+
+    if topic0 == UNISWAP_V2_SWAP_TOPIC0:
+        if len(body) < 64 * 4:
+            return False, None
+        words = [body[i : i + 64] for i in range(0, 64 * 4, 64)]
+        ok0, amount0_in = _analytics_decode_uint256_word(words[0])
+        ok1, amount1_in = _analytics_decode_uint256_word(words[1])
+        ok2, amount0_out = _analytics_decode_uint256_word(words[2])
+        ok3, amount1_out = _analytics_decode_uint256_word(words[3])
+        if not all((ok0, ok1, ok2, ok3)):
+            return False, None
+
+        in_token: str | None = None
+        out_token: str | None = None
+        in_amount = 0
+        out_amount = 0
+        if amount0_in > 0 and amount1_out > 0:
+            in_token = token0
+            out_token = token1
+            in_amount = amount0_in
+            out_amount = amount1_out
+        elif amount1_in > 0 and amount0_out > 0:
+            in_token = token1
+            out_token = token0
+            in_amount = amount1_in
+            out_amount = amount0_out
+        if not in_token or not out_token:
+            return False, None
+
+        return True, {
+            "log_index": log_index,
+            "pool": pool,
+            "version": "v2",
+            "in_token": in_token,
+            "out_token": out_token,
+            "in_amount_raw": str(in_amount),
+            "out_amount_raw": str(out_amount),
+        }
+
+    if topic0 == UNISWAP_V3_SWAP_TOPIC0:
+        if len(body) < 64 * 2:
+            return False, None
+        word0 = body[0:64]
+        word1 = body[64:128]
+        ok0, amount0 = _analytics_decode_int256_word(word0)
+        ok1, amount1 = _analytics_decode_int256_word(word1)
+        if not ok0 or not ok1:
+            return False, None
+
+        in_token: str | None = None
+        out_token: str | None = None
+        in_amount = 0
+        out_amount = 0
+        if amount0 > 0 and amount1 < 0:
+            in_token = token0
+            out_token = token1
+            in_amount = amount0
+            out_amount = -amount1
+        elif amount1 > 0 and amount0 < 0:
+            in_token = token1
+            out_token = token0
+            in_amount = amount1
+            out_amount = -amount0
+        if not in_token or not out_token:
+            return False, None
+
+        return True, {
+            "log_index": log_index,
+            "pool": pool,
+            "version": "v3",
+            "in_token": in_token,
+            "out_token": out_token,
+            "in_amount_raw": str(in_amount),
+            "out_amount_raw": str(out_amount),
+        }
+
+    return False, None
+
+
+def _analytics_build_arbitrage_candidate(
+    *,
+    tx_hash: str,
+    tx_from: str | None,
+    tx_to: str | None,
+    tx_value: Any,
+    swaps: list[dict[str, Any]],
+    min_swaps: int,
+    include_swaps: bool,
+) -> dict[str, Any] | None:
+    if len(swaps) < min_swaps:
+        return None
+
+    unique_pools = len({str(item.get("pool", "")).lower() for item in swaps if item.get("pool")})
+    versions = sorted({str(item.get("version", "")) for item in swaps if item.get("version")})
+
+    continuity_links = 0
+    for idx in range(len(swaps) - 1):
+        out_token = str(swaps[idx].get("out_token", "")).lower()
+        next_in = str(swaps[idx + 1].get("in_token", "")).lower()
+        if out_token and next_in and out_token == next_in:
+            continuity_links += 1
+
+    first_in = str(swaps[0].get("in_token", "")).lower()
+    last_out = str(swaps[-1].get("out_token", "")).lower()
+    has_cycle = bool(first_in and last_out and first_in == last_out)
+
+    cycle_gain_raw: str | None = None
+    if has_cycle:
+        try:
+            first_in_amount = int(str(swaps[0].get("in_amount_raw", "0")), 10)
+            last_out_amount = int(str(swaps[-1].get("out_amount_raw", "0")), 10)
+            cycle_gain_raw = str(last_out_amount - first_in_amount)
+        except Exception:  # noqa: BLE001
+            cycle_gain_raw = None
+
+    reasons: list[str] = []
+    if has_cycle:
+        reasons.append("cyclic path (token returns to start)")
+    if continuity_links >= 1 and unique_pools >= 2:
+        reasons.append("multi-pool routed swaps in one tx")
+    if len(versions) > 1:
+        reasons.append("mixed Uniswap V2 + V3 swaps")
+
+    is_candidate = (
+        has_cycle
+        or (continuity_links >= 1 and len(swaps) >= 3)
+        or (len(versions) > 1 and len(swaps) >= 2)
+    )
+    if not is_candidate:
+        return None
+
+    path_tokens: list[str] = []
+    if first_in:
+        path_tokens.append(first_in)
+    for item in swaps:
+        out_token = str(item.get("out_token", "")).lower()
+        if out_token:
+            path_tokens.append(out_token)
+
+    candidate: dict[str, Any] = {
+        "tx_hash": tx_hash,
+        "from": tx_from,
+        "to": tx_to,
+        "value_wei": tx_value,
+        "swap_count": len(swaps),
+        "unique_pools": unique_pools,
+        "versions": versions,
+        "continuity_links": continuity_links,
+        "has_cycle": has_cycle,
+        "cycle_gain_raw": cycle_gain_raw,
+        "reasons": reasons,
+        "path_tokens": path_tokens,
+        "path_display": _analytics_format_path(path_tokens),
+    }
+    if include_swaps:
+        candidate["swaps"] = swaps
+    return candidate
+
+
+def cmd_analytics_arbitrage_patterns(args: argparse.Namespace) -> int:
+    ok_manifest, manifest_or_rc = _require_manifest(args)
+    if not ok_manifest:
+        return int(manifest_or_rc)
+    manifest_by_method = manifest_or_rc
+
+    ok_env, env_or_rc = _require_env_json(
+        raw_env_json=args.env_json,
+        method="analytics.arbitrage_patterns",
+        compact=bool(args.compact),
+    )
+    if not ok_env:
+        return int(env_or_rc)
+    env = env_or_rc
+
+    limit = int(args.limit)
+    if limit < 0:
+        _print_error(
+            method="analytics.arbitrage_patterns",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="limit must be a non-negative integer",
+            pretty=not args.compact,
+        )
+        return 2
+
+    min_swaps = int(args.min_swaps)
+    if min_swaps < 2:
+        _print_error(
+            method="analytics.arbitrage_patterns",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="min-swaps must be >= 2",
+            pretty=not args.compact,
+        )
+        return 2
+
+    max_transactions: int | None = None
+    if args.max_transactions is not None:
+        max_transactions = int(args.max_transactions)
+        if max_transactions <= 0:
+            _print_error(
+                method="analytics.arbitrage_patterns",
+                status="error",
+                code=ERR_INVALID_REQUEST,
+                message="max-transactions must be a positive integer",
+                pretty=not args.compact,
+            )
+            return 2
+
+    ok_block, block_tag, block_err = _analytics_parse_block_tag(args.block)
+    if not ok_block:
+        _print_error(
+            method="analytics.arbitrage_patterns",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message=block_err,
+            pretty=not args.compact,
+        )
+        return 2
+
+    execute_rpc = _make_analytics_executor(
+        manifest_by_method=manifest_by_method,
+        default_context={},
+        default_env=env,
+        default_timeout_seconds=float(args.timeout_seconds),
+    )
+
+    rc_block, block_payload = execute_rpc(
+        {"method": "eth_getBlockByNumber", "params": [block_tag, True]}
+    )
+    if rc_block != 0:
+        payload = _wrap_stage_failure(
+            "analytics.arbitrage_patterns",
+            f"eth_getBlockByNumber({block_tag})",
+            block_payload,
+        )
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return rc_block
+
+    block_result = block_payload.get("result")
+    if not isinstance(block_result, dict):
+        payload = _build_error_payload(
+            method="analytics.arbitrage_patterns",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="eth_getBlockByNumber returned non-object result",
+        )
+        payload["request_block"] = block_tag
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return 2
+
+    txs = block_result.get("transactions", [])
+    if not isinstance(txs, list):
+        payload = _build_error_payload(
+            method="analytics.arbitrage_patterns",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="block.transactions must be a list",
+        )
+        render_rc = _render_output(
+            payload=payload,
+            compact=args.compact,
+            result_only=bool(args.result_only),
+            select=args.select,
+            result_field="result",
+        )
+        if render_rc != 0:
+            return render_rc
+        return 2
+
+    txs_to_scan = txs
+    if max_transactions is not None:
+        txs_to_scan = txs_to_scan[:max_transactions]
+
+    block_number_raw = block_result.get("number")
+    block_number: int | None = None
+    if isinstance(block_number_raw, str):
+        ok_number, as_number, _ = _analytics_hex_to_int(block_number_raw)
+        if ok_number:
+            block_number = as_number
+
+    block_timestamp_raw = block_result.get("timestamp")
+    block_timestamp_utc: str | None = None
+    if isinstance(block_timestamp_raw, str):
+        ok_ts, as_ts, _ = _analytics_hex_to_int(block_timestamp_raw)
+        if ok_ts:
+            try:
+                block_timestamp_utc = datetime.fromtimestamp(as_ts, tz=UTC).isoformat()
+            except Exception:  # noqa: BLE001
+                block_timestamp_utc = None
+
+    block_for_calls = block_number_raw if isinstance(block_number_raw, str) else block_tag
+
+    pool_cache: dict[str, tuple[str | None, str | None]] = {}
+    receipt_failures: list[dict[str, Any]] = []
+    pool_failures: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
+    txs_with_swaps = 0
+
+    for tx_item in txs_to_scan:
+        tx_hash: str | None = None
+        tx_from: str | None = None
+        tx_to: str | None = None
+        tx_value: Any = None
+
+        if isinstance(tx_item, dict):
+            raw_hash = tx_item.get("hash")
+            if isinstance(raw_hash, str):
+                tx_hash = raw_hash
+            raw_from = tx_item.get("from")
+            if isinstance(raw_from, str):
+                tx_from = raw_from
+            raw_to = tx_item.get("to")
+            if isinstance(raw_to, str):
+                tx_to = raw_to
+            tx_value = tx_item.get("value")
+        elif isinstance(tx_item, str):
+            tx_hash = tx_item
+
+        if not tx_hash:
+            continue
+
+        rc_receipt, receipt_payload = execute_rpc(
+            {"method": "eth_getTransactionReceipt", "params": [tx_hash]}
+        )
+        if rc_receipt != 0:
+            receipt_failures.append(
+                {
+                    "tx_hash": tx_hash,
+                    "error_code": receipt_payload.get("error_code"),
+                    "error_message": receipt_payload.get("error_message"),
+                }
+            )
+            continue
+
+        receipt = receipt_payload.get("result")
+        if not isinstance(receipt, dict):
+            receipt_failures.append(
+                {
+                    "tx_hash": tx_hash,
+                    "error_code": ERR_INVALID_REQUEST,
+                    "error_message": "eth_getTransactionReceipt returned non-object result",
+                }
+            )
+            continue
+
+        logs = receipt.get("logs", [])
+        if not isinstance(logs, list):
+            continue
+
+        swaps: list[dict[str, Any]] = []
+        for idx, log_item in enumerate(logs):
+            if not isinstance(log_item, dict):
+                continue
+            topics = log_item.get("topics", [])
+            if not isinstance(topics, list) or not topics:
+                continue
+            if not isinstance(topics[0], str):
+                continue
+            topic0 = str(topics[0]).lower()
+            if topic0 not in {UNISWAP_V2_SWAP_TOPIC0, UNISWAP_V3_SWAP_TOPIC0}:
+                continue
+
+            pool = str(log_item.get("address", "")).lower()
+            if not ADDRESS_RE.fullmatch(pool):
+                continue
+
+            tokens = pool_cache.get(pool)
+            if tokens is None:
+                rc_pool, pool_payload, resolved_tokens = _analytics_fetch_pool_tokens_for_arbitrage(
+                    pool=pool,
+                    block_tag=block_for_calls,
+                    execute_rpc=execute_rpc,
+                )
+                pool_cache[pool] = resolved_tokens
+                tokens = resolved_tokens
+                if rc_pool != 0:
+                    pool_failures.append(
+                        {
+                            "tx_hash": tx_hash,
+                            "pool": pool,
+                            "error_code": pool_payload.get("error_code"),
+                            "error_message": pool_payload.get("error_message"),
+                        }
+                    )
+                    continue
+
+            token0, token1 = tokens
+            if not token0 or not token1:
+                continue
+
+            ok_swap, swap = _analytics_decode_swap_for_arbitrage(
+                log_item=log_item,
+                topic0=topic0,
+                pool=pool,
+                token0=token0,
+                token1=token1,
+                log_index=idx,
+            )
+            if not ok_swap or not isinstance(swap, dict):
+                continue
+            swaps.append(swap)
+
+        if not swaps:
+            continue
+        txs_with_swaps += 1
+
+        candidate = _analytics_build_arbitrage_candidate(
+            tx_hash=tx_hash,
+            tx_from=tx_from,
+            tx_to=tx_to,
+            tx_value=tx_value,
+            swaps=swaps,
+            min_swaps=min_swaps,
+            include_swaps=bool(args.include_swaps),
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+
+    candidates.sort(
+        key=lambda item: (
+            1 if bool(item.get("has_cycle")) else 0,
+            int(item.get("swap_count", 0)),
+            int(item.get("continuity_links", 0)),
+            int(item.get("unique_pools", 0)),
+        ),
+        reverse=True,
+    )
+    returned_candidates = candidates[:limit]
+
+    result: dict[str, Any] = {
+        "requested_block": block_tag,
+        "block": {
+            "number": block_number,
+            "number_hex": block_number_raw if isinstance(block_number_raw, str) else None,
+            "hash": block_result.get("hash"),
+            "timestamp_utc": block_timestamp_utc,
+            "tx_count_total": len(txs),
+            "tx_count_scanned": len(txs_to_scan),
+        },
+        "summary": {
+            "transactions_with_swap_logs": txs_with_swaps,
+            "arbitrage_candidates_total": len(candidates),
+            "arbitrage_candidates_returned": len(returned_candidates),
+            "receipt_failures": len(receipt_failures),
+            "pool_metadata_failures": len(pool_failures),
+            "unique_pools_seen": len(pool_cache),
+        },
+        "heuristic": (
+            "Detect Uniswap V2/V3 swap chains in each transaction and flag cyclic token paths, "
+            "multi-pool continuity, and mixed V2+V3 routing as arbitrage-like patterns."
+        ),
+        "candidates": returned_candidates,
+    }
+    if bool(args.include_failures):
+        result["failures"] = {
+            "receipt_failures": receipt_failures,
+            "pool_metadata_failures": pool_failures,
+        }
+
+    payload = {
+        "timestamp_utc": _timestamp(),
+        "method": "analytics.arbitrage_patterns",
+        "status": "ok",
+        "ok": True,
+        "error_code": None,
+        "error_message": None,
+        "result": result,
+    }
+    render_rc = _render_output(
+        payload=payload,
+        compact=args.compact,
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field="result",
+    )
+    if render_rc != 0:
+        return render_rc
+    return 0
+
+
 def _eth_call_req(
     *,
     to: str,
@@ -3211,6 +3837,43 @@ def build_parser() -> argparse.ArgumentParser:
     new_pools_parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     _add_output_args(new_pools_parser)
     new_pools_parser.set_defaults(func=cmd_analytics_factory_new_pools)
+
+    arbitrage_parser = analytics_sub.add_parser(
+        "arbitrage-patterns",
+        help="Inspect one block and flag arbitrage-like swap routing patterns",
+    )
+    arbitrage_parser.add_argument(
+        "--block",
+        default="latest",
+        help="block tag (latest/earliest/pending/safe/finalized) or block number",
+    )
+    arbitrage_parser.add_argument("--limit", type=int, default=10, help="cap returned candidates")
+    arbitrage_parser.add_argument(
+        "--min-swaps",
+        type=int,
+        default=2,
+        help="minimum swap count in a transaction to consider candidate classification",
+    )
+    arbitrage_parser.add_argument(
+        "--max-transactions",
+        type=int,
+        help="scan only the first N transactions from the block",
+    )
+    arbitrage_parser.add_argument(
+        "--include-swaps",
+        action="store_true",
+        help="include per-swap hop rows in each candidate",
+    )
+    arbitrage_parser.add_argument(
+        "--include-failures",
+        action="store_true",
+        help="include receipt/pool metadata failure details",
+    )
+    arbitrage_parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")
+    arbitrage_parser.add_argument("--env-json", help="runtime env object as JSON")
+    arbitrage_parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    _add_output_args(arbitrage_parser)
+    arbitrage_parser.set_defaults(func=cmd_analytics_arbitrage_patterns)
 
     list_parser = sub.add_parser("supported-methods", help="List enabled methods from manifest")
     list_parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")

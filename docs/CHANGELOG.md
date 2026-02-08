@@ -1,6 +1,11 @@
 # Docs Changelog
 
 ## 2026-02-08
+- Added `analytics arbitrage-patterns` command for block-level arbitrage-like swap route detection:
+  - scans one block's transactions/receipts,
+  - decodes Uniswap V2/V3 `Swap` patterns,
+  - flags cyclic, multi-pool continuity, and mixed V2+V3 candidate routes.
+- Added learning note for command behavior and limits (`docs/learnings/2026-02-08-arbitrage-patterns-command.md`).
 - Changed RPC configuration model from required env to default+override:
   - runtime now resolves endpoints in this order: `ETH_RPC_URL` -> `ETH_RPC_DEFAULT_URLS` -> built-in mainnet pool
   - built-in mainnet pool currently includes:

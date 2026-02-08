@@ -16,6 +16,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `README.md`: Repository-level getting-started and human-to-agent prompt templates.
 
 ### Active learnings
+- `docs/learnings/2026-02-08-arbitrage-patterns-command.md`: Added `analytics arbitrage-patterns` for block-level arbitrage-like route detection over Uniswap V2/V3 swap paths.
 - `docs/learnings/2026-02-08-rpc-default-pool-override.md`: RPC endpoint resolution now uses `ETH_RPC_URL` override first, then default pool fallback; env requirement removed.
 - `docs/learnings/2026-02-08-codex-repo-discovery-packaging.md`: Added `.agents/skills/evm` repo-discovery alias while keeping `evm/` as canonical package path.
 - `docs/learnings/2026-02-07-cast-hybrid-runtime.md`: Cast codebase findings and wrapper/cast delegation boundary.
