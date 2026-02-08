@@ -1,5 +1,12 @@
 # Docs Changelog
 
+## 2026-02-08
+- Added Codex repo-discovery packaging path:
+  - created `.agents/skills/evm` as a symlink alias to the canonical `evm/` skill package
+  - retained `evm/` paths to avoid breaking existing docs/tests/tooling references
+- Added learning note for the packaging decision (`docs/learnings/2026-02-08-codex-repo-discovery-packaging.md`).
+- Updated docs index and top-level README references for the new discovery path.
+
 ## 2026-02-07
 - Simplified test layout:
   - split monolithic `evm/tests/test_evm_rpc_wrapper.py` into focused suites:

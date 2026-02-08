@@ -16,6 +16,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `README.md`: Repository-level getting-started and human-to-agent prompt templates.
 
 ### Active learnings
+- `docs/learnings/2026-02-08-codex-repo-discovery-packaging.md`: Added `.agents/skills/evm` repo-discovery alias while keeping `evm/` as canonical package path.
 - `docs/learnings/2026-02-07-cast-hybrid-runtime.md`: Cast codebase findings and wrapper/cast delegation boundary.
 - `docs/learnings/2026-02-07-analytics-foundation-v0.1.md`: Initial analytics command rollout and shared analytics module foundation.
 - `docs/learnings/2026-02-07-simplification-pass.md`: Post-audit simplification pass (shared parsers/prelude helpers, removed custom keccak implementation).
@@ -32,6 +33,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `docs/archive/plans/`: Historical superseded plans kept for provenance.
 
 ### Skill Package
+- `.agents/skills/evm`: Codex repo-discovery path (symlink alias to `evm/`).
 - `evm/SKILL.md`: Skill entrypoint and usage rules.
 - `evm/scripts/evm_rpc.py`: Runtime JSON-RPC wrapper entrypoint.
 - `evm/scripts/rpc_contract.py`: Request/response contract helpers.

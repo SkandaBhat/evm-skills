@@ -102,6 +102,7 @@ If blocked by missing ETH_RPC_URL, ask me for it.
 ```
 
 ## References
+- Codex repo-discovery alias: `.agents/skills/evm` (symlink to `evm/`)
 - Skill entrypoint: `evm/SKILL.md`
 - Runtime wrapper: `evm/scripts/evm_rpc.py`
 - Documentation index: `docs/README.md`
