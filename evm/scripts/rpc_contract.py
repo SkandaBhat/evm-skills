@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from argparse import Namespace
 from typing import Any
 
 DEFAULT_TIMEOUT_SECONDS = 20.0
+
+DEFAULT_PUBLIC_MAINNET_RPC_URLS = (
+    "https://ethereum-rpc.publicnode.com",
+    "https://eth.drpc.org",
+    "https://1rpc.io/eth",
+    "https://eth.llamarpc.com",
+)
+DEFAULT_RPC_POOL_ENV_VAR = "ETH_RPC_DEFAULT_URLS"
 
 
 def parse_request_from_args(args: Namespace) -> dict[str, Any]:
@@ -74,3 +83,32 @@ def build_execution_env(req: dict[str, Any]) -> dict[str, str]:
         for k, v in extra.items():
             env[str(k)] = str(v)
     return env
+
+
+def _split_rpc_urls(raw: str) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for chunk in re.split(r"[\s,]+", raw.strip()):
+        candidate = str(chunk).strip()
+        if not candidate:
+            continue
+        if not (candidate.startswith("http://") or candidate.startswith("https://")):
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        out.append(candidate)
+    return out
+
+
+def resolve_rpc_endpoints(execution_env: dict[str, str]) -> tuple[list[str], str]:
+    primary = str(execution_env.get("ETH_RPC_URL", "")).strip()
+    if primary:
+        return [primary], "user_env"
+
+    env_pool_raw = str(execution_env.get(DEFAULT_RPC_POOL_ENV_VAR, "")).strip()
+    env_pool = _split_rpc_urls(env_pool_raw) if env_pool_raw else []
+    if env_pool:
+        return env_pool, "env_default_pool"
+
+    return list(DEFAULT_PUBLIC_MAINNET_RPC_URLS), "built_in_default_pool"

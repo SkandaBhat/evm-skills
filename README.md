@@ -15,7 +15,13 @@ This repo provides an `evm` skill with deterministic, policy-first commands for:
 ## Runtime Requirements
 1. `python3`
 2. `cast` (Foundry CLI) available in `PATH`
-3. `ETH_RPC_URL` provided by the user/session (not persisted by this skill)
+3. Optional `ETH_RPC_URL` from user/session to override the default public pool (never persisted by this skill)
+
+Default mainnet pool (used only when `ETH_RPC_URL` is not set):
+1. `https://ethereum-rpc.publicnode.com`
+2. `https://eth.drpc.org`
+3. `https://1rpc.io/eth`
+4. `https://eth.llamarpc.com`
 
 Architecture split:
 1. Wrapper-owned: policy gates, safety controls, chain templating, deterministic envelopes, logs orchestration.
@@ -30,9 +36,8 @@ Use this section when a human is interacting with an agent like Codex or Claude 
 Use the `evm` skill only.
 Use JSON-RPC only via the skill wrapper commands.
 Require cast as the low-level runtime; do not replace the wrapper with ad-hoc scripts.
-Never invent or auto-select public RPC URLs.
-If ETH_RPC_URL is missing, ask exactly:
-"couldnt find an rpc url. give me an rpc url so i can add it to env."
+Use `ETH_RPC_URL` when the user provides one; otherwise use the skill's default Ethereum mainnet RPC pool.
+Do not persist RPC URLs to disk.
 Prefer deterministic JSON output (`--compact`, `--result-only`, `--select`) when possible.
 ```
 
@@ -98,7 +103,7 @@ Return only pool address, token0, token1, and tx hash.
 Using the evm skill, <goal>.
 Use <command(s)>.
 Return <exact output shape>.
-If blocked by missing ETH_RPC_URL, ask me for it.
+If reliability/privacy is important, ask me for `ETH_RPC_URL` and use it as override.
 ```
 
 ## References

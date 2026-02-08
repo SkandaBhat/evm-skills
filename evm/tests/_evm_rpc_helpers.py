@@ -31,6 +31,7 @@ def _run_cmd(
     ]
     env = os.environ.copy()
     env.pop("ETH_RPC_URL", None)
+    env.pop("ETH_RPC_DEFAULT_URLS", None)
     if extra_env:
         env.update(extra_env)
     return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)

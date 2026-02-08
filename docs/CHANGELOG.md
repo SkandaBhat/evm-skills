@@ -1,11 +1,36 @@
 # Docs Changelog
 
 ## 2026-02-08
+- Changed RPC configuration model from required env to default+override:
+  - runtime now resolves endpoints in this order: `ETH_RPC_URL` -> `ETH_RPC_DEFAULT_URLS` -> built-in mainnet pool
+  - built-in mainnet pool currently includes:
+    - `https://ethereum-rpc.publicnode.com`
+    - `https://eth.drpc.org`
+    - `https://1rpc.io/eth`
+    - `https://eth.llamarpc.com`
+  - default-pool failover only advances on transport/timeout failures
+  - explicit `ETH_RPC_URL` disables public-pool fallback
+- Added learning note for RPC endpoint precedence and fallback behavior (`docs/learnings/2026-02-08-rpc-default-pool-override.md`).
+- Updated active docs and skill guidance for optional `ETH_RPC_URL` override behavior:
+  - `README.md`
+  - `evm/SKILL.md`
+  - `docs/plans/usability-prompt-pack.md`
+  - `docs/plans/cast-hybrid-architecture.md`
+  - `evm/references/user-stories.json`
+  - `evm/references/user-stories.md`
 - Added Codex repo-discovery packaging path:
   - created `.agents/skills/evm` as a symlink alias to the canonical `evm/` skill package
   - retained `evm/` paths to avoid breaking existing docs/tests/tooling references
 - Added learning note for the packaging decision (`docs/learnings/2026-02-08-codex-repo-discovery-packaging.md`).
 - Updated docs index and top-level README references for the new discovery path.
+- Added usability prompt-pack plan (`docs/plans/usability-prompt-pack.md`) with:
+  - session harness prompt,
+  - quick 5-prompt regression pack,
+  - extended 10-prompt pack for pre-release checks,
+  - scoring rubric and run-log template.
+- Tuned usability prompt-pack defaults after live mainnet pass:
+  - changed quick-pack USDC logs window from `last 2000 blocks` to `last 100 blocks` to avoid `LOGS_TOO_MANY_RESULTS`,
+  - clarified ABI decode prompt to normalize cast-formatted numeric strings to plain integer digits.
 
 ## 2026-02-07
 - Simplified test layout:

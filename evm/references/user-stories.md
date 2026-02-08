@@ -11,7 +11,7 @@ Source: `references/user-stories.json`.
 - Acceptance criteria:
   - Returns chain ID and sync state in one workflow.
   - Surfaces fee metrics for decision-making.
-  - Fails with RPC_URL_REQUIRED when ETH_RPC_URL is missing.
+  - Uses default endpoint pool when ETH_RPC_URL is missing.
 
 ## `account-state-audit`
 - Title: Audit account state

@@ -2,7 +2,7 @@
 name: evm
 description: Agent workflow for EVM operations using Ethereum JSON-RPC, with cast-backed low-level execution and policy-first wrapper controls.
 license: Proprietary. LICENSE.txt has complete terms
-compatibility: Requires python3, cast (Foundry CLI), and an RPC endpoint provided by ETH_RPC_URL.
+compatibility: Requires python3 and cast (Foundry CLI). Supports optional ETH_RPC_URL override, otherwise uses built-in Ethereum mainnet RPC pool.
 ---
 
 # EVM JSON-RPC Wallet Skill
@@ -12,11 +12,16 @@ Use this skill for EVM tasks through Ethereum JSON-RPC with a wrapper+cast hybri
 ## Core rules
 1. Use only the JSON-RPC wrapper flow defined in this skill.
 2. Treat `cast` as required runtime dependency for low-level execution.
-3. Do not invent or auto-select public RPC URLs.
-4. Require `ETH_RPC_URL` for RPC-dependent operations.
-5. If `ETH_RPC_URL` is missing, ask:
-   - `couldnt find an rpc url. give me an rpc url so i can add it to env.`
+3. If `ETH_RPC_URL` is provided, use it as the RPC endpoint for requests.
+4. If `ETH_RPC_URL` is missing, use the built-in Ethereum mainnet default pool.
+5. Optional: `ETH_RPC_DEFAULT_URLS` can override the built-in default pool (comma/space/newline-separated URLs).
 6. Do not persist RPC URLs to disk.
+
+Default built-in Ethereum mainnet pool:
+1. `https://ethereum-rpc.publicnode.com`
+2. `https://eth.drpc.org`
+3. `https://1rpc.io/eth`
+4. `https://eth.llamarpc.com`
 
 ## Method coverage source of truth
 - `references/rpc-method-inventory.json` (machine-readable inventory)

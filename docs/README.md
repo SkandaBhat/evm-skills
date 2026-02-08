@@ -16,6 +16,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `README.md`: Repository-level getting-started and human-to-agent prompt templates.
 
 ### Active learnings
+- `docs/learnings/2026-02-08-rpc-default-pool-override.md`: RPC endpoint resolution now uses `ETH_RPC_URL` override first, then default pool fallback; env requirement removed.
 - `docs/learnings/2026-02-08-codex-repo-discovery-packaging.md`: Added `.agents/skills/evm` repo-discovery alias while keeping `evm/` as canonical package path.
 - `docs/learnings/2026-02-07-cast-hybrid-runtime.md`: Cast codebase findings and wrapper/cast delegation boundary.
 - `docs/learnings/2026-02-07-analytics-foundation-v0.1.md`: Initial analytics command rollout and shared analytics module foundation.
@@ -27,6 +28,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 ### Active plans
 - `docs/plans/cast-hybrid-architecture.md`: Target architecture for cast-backed low-level execution with wrapper-owned policy/safety controls.
 - `docs/plans/analytics-commands-plan.md`: Roadmap for the 12 searcher-focused analytics commands and shared foundation.
+- `docs/plans/usability-prompt-pack.md`: Repeatable usability and skill-adherence prompt suites (quick and extended packs) with scoring rubric and tuned mainnet-safe defaults.
 
 ### Archive
 - `docs/archive/learnings/`: Historical learning notes from earlier milestones.

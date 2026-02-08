@@ -22,12 +22,18 @@ from ._evm_rpc_helpers import (
     _stop,
 )
 
-def test_requires_rpc_url():
-    req = {"method": "eth_blockNumber", "params": [], "context": {}, "timeout_seconds": 2}
-    proc = _run_exec(req)
-    assert proc.returncode == 4
-    payload = json.loads(proc.stdout)
-    assert payload["error_code"] == "RPC_URL_REQUIRED"
+def test_exec_uses_default_pool_when_rpc_url_missing():
+    server, url = _serve([{"jsonrpc": "2.0", "id": 1, "result": "0x2a"}])
+    try:
+        req = {"method": "eth_blockNumber", "params": [], "context": {}, "timeout_seconds": 2}
+        proc = _run_exec(req, {"ETH_RPC_DEFAULT_URLS": url})
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["ok"] is True
+        assert payload["result"] == "0x2a"
+        assert payload["rpc_request"]["rpc_endpoint_source"] == "env_default_pool"
+    finally:
+        _stop(server)
 
 def test_local_sensitive_denied_without_flag():
     req = {"method": "eth_sign", "params": ["0x0", "0x0"], "context": {}, "timeout_seconds": 2}

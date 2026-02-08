@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# Deprecated in 2026-02-08 (default-pool RPC resolution), retained for backward compatibility.
 RPC_URL_REQUIRED_MESSAGE = "couldnt find an rpc url. give me an rpc url so i can add it to env."
 
 ERR_INVALID_REQUEST = "INVALID_REQUEST"

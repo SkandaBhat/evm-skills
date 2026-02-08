@@ -51,19 +51,83 @@ def test_logs_still_work_when_cast_missing():
     finally:
         _stop(server)
 
-def test_logs_requires_rpc_url():
-    req = {
-        "filter": {
-            "fromBlock": 1,
-            "toBlock": 1,
-            "address": "0x1111111111111111111111111111111111111111",
-            "topics": [],
+def test_logs_uses_default_pool_when_rpc_url_missing():
+    server, url = _serve(
+        [
+            {"jsonrpc": "2.0", "id": 1, "result": []},
+        ]
+    )
+    try:
+        req = {
+            "filter": {
+                "fromBlock": 1,
+                "toBlock": 1,
+                "address": "0x1111111111111111111111111111111111111111",
+                "topics": [],
+            }
         }
-    }
-    proc = _run_logs(req)
-    assert proc.returncode == 4
-    payload = json.loads(proc.stdout)
-    assert payload["error_code"] == "RPC_URL_REQUIRED"
+        proc = _run_logs(req, {"ETH_RPC_DEFAULT_URLS": url})
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["ok"] is True
+        assert payload["result"] == []
+    finally:
+        _stop(server)
+
+
+def test_logs_fallback_to_second_default_endpoint_on_transport_error():
+    server, url = _serve(
+        [
+            {"jsonrpc": "2.0", "id": 1, "result": []},
+        ]
+    )
+    try:
+        req = {
+            "filter": {
+                "fromBlock": 1,
+                "toBlock": 1,
+                "address": "0x1111111111111111111111111111111111111111",
+                "topics": [],
+            }
+        }
+        proc = _run_logs(req, {"ETH_RPC_DEFAULT_URLS": f"http://127.0.0.1:1,{url}"})
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["ok"] is True
+        assert payload["result"] == []
+        assert len(_RPCHandler.calls) == 1
+    finally:
+        _stop(server)
+
+
+def test_logs_user_rpc_url_disables_default_pool_fallback():
+    server, url = _serve(
+        [
+            {"jsonrpc": "2.0", "id": 1, "result": []},
+        ]
+    )
+    try:
+        req = {
+            "filter": {
+                "fromBlock": 1,
+                "toBlock": 1,
+                "address": "0x1111111111111111111111111111111111111111",
+                "topics": [],
+            }
+        }
+        proc = _run_logs(
+            req,
+            {
+                "ETH_RPC_URL": "http://127.0.0.1:1",
+                "ETH_RPC_DEFAULT_URLS": url,
+            },
+        )
+        assert proc.returncode == 1
+        payload = json.loads(proc.stdout)
+        assert payload["error_code"] in {"RPC_TRANSPORT_ERROR", "RPC_TIMEOUT"}
+        assert len(_RPCHandler.calls) == 0
+    finally:
+        _stop(server)
 
 def test_logs_heavy_read_requires_flag():
     req = {

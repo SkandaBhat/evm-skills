@@ -39,11 +39,10 @@ from error_map import (  # noqa: E402
     ERR_RPC_BROADCAST_NONCE_TOO_LOW,
     ERR_RPC_BROADCAST_UNDERPRICED,
     ERR_RPC_REMOTE,
+    ERR_RPC_TRANSPORT,
     ERR_SIMULATION_REVERTED,
     ERR_TRACE_UNSUPPORTED,
     ERR_RPC_TIMEOUT,
-    ERR_RPC_URL_REQUIRED,
-    RPC_URL_REQUIRED_MESSAGE,
 )
 from adapters import validate_adapter_preflight  # noqa: E402
 from abi_codec import decode_log, event_topic0, run_abi_operation  # noqa: E402
@@ -70,6 +69,7 @@ from rpc_contract import (  # noqa: E402
     build_execution_env,
     normalized_context,
     parse_request_from_args,
+    resolve_rpc_endpoints,
     validate_request,
 )
 from rpc_transport import invoke_rpc  # noqa: E402
@@ -499,20 +499,7 @@ def run_rpc_request(
             )
 
     execution_env = build_execution_env(req)
-    rpc_url = str(execution_env.get("ETH_RPC_URL", "")).strip()
-    if not rpc_url:
-        return (
-            4,
-            _build_error_payload(
-                method=method,
-                status="denied",
-                code=ERR_RPC_URL_REQUIRED,
-                message=RPC_URL_REQUIRED_MESSAGE,
-                policy=policy,
-                request=req,
-                hint="Set ETH_RPC_URL in env before retrying.",
-            ),
-        )
+    rpc_urls, rpc_endpoint_source = resolve_rpc_endpoints(execution_env)
 
     timeout_seconds = float(req.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS))
     rpc_payload = {
@@ -521,17 +508,42 @@ def run_rpc_request(
         "method": method,
         "params": req.get("params", []),
     }
-    rpc_request_meta = {"jsonrpc": "2.0", "id": rpc_payload["id"], "method": method}
     retries = 0 if policy.get("tier") == "broadcast" else 2
 
     start = time.perf_counter()
-    transport = invoke_rpc(
-        rpc_url=rpc_url,
-        payload=rpc_payload,
-        timeout_seconds=timeout_seconds,
-        retries=retries,
-    )
+    transport: dict[str, Any] | None = None
+    attempted_endpoints = 0
+    for rpc_url in rpc_urls:
+        attempted_endpoints += 1
+        transport = invoke_rpc(
+            rpc_url=rpc_url,
+            payload=rpc_payload,
+            timeout_seconds=timeout_seconds,
+            retries=retries,
+        )
+        if transport["ok"]:
+            break
+        if len(rpc_urls) <= 1:
+            break
+        if str(transport.get("error_code")) not in {ERR_RPC_TIMEOUT, ERR_RPC_TRANSPORT}:
+            break
+
+    if transport is None:
+        transport = {
+            "ok": False,
+            "error_code": ERR_RPC_TRANSPORT,
+            "error_message": "rpc endpoint resolution produced no usable endpoint",
+            "rpc_response": None,
+        }
+
     duration_ms = int((time.perf_counter() - start) * 1000)
+    rpc_request_meta = {
+        "jsonrpc": "2.0",
+        "id": rpc_payload["id"],
+        "method": method,
+        "rpc_endpoint_source": rpc_endpoint_source,
+        "rpc_attempted_endpoints": attempted_endpoints,
+    }
 
     if not transport["ok"]:
         status = "timeout" if transport["error_code"] == ERR_RPC_TIMEOUT else "error"
@@ -540,6 +552,10 @@ def run_rpc_request(
             str(transport["error_code"]),
             str(transport.get("error_message", "")),
         )
+        if not hint and attempted_endpoints > 1 and rpc_endpoint_source != "user_env":
+            hint = (
+                "all default rpc endpoints failed. set ETH_RPC_URL to your preferred provider and retry."
+            )
         return (
             1,
             _build_error_payload(

@@ -19,7 +19,7 @@ Use `cast` for low-level EVM/RPC primitives while retaining wrapper-owned policy
 
 ## Guardrails
 1. No bypass of manifest policy checks.
-2. Keep `RPC_URL_REQUIRED_MESSAGE` behavior unchanged.
+2. Keep RPC resolution precedence stable: `ETH_RPC_URL` override first, then default pool.
 3. Keep wrapper error taxonomy stable (`error_map.py`).
 4. Keep logs chunking/splitting/dedupe deterministic and wrapper-controlled.
 
