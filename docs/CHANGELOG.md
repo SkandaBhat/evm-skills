@@ -1,6 +1,42 @@
 # Docs Changelog
 
 ## 2026-02-08
+- Continued analytics runtime decomposition:
+  - extracted shared analytics runtime helpers into `evm/scripts/analytics_runtime.py`,
+  - migrated analytics executor/runtime prelude/range resolver/scan wrapper wiring out of `evm/scripts/evm_rpc.py`.
+- Reduced wrapper monolith further (`evm/scripts/evm_rpc.py` now ~3.02k lines in this pass).
+- Continued analytics simplification and output controls:
+  - extracted Uniswap V2 pool metadata fetching into `evm/scripts/analytics_pool_metadata.py`,
+  - added arbitrage candidate pagination (`--page`, `--page-size`) within the existing `--limit` cap for `analytics arbitrage-patterns`.
+- Re-ran full integration suite after this pass (`45 passed`).
+- Continued analytics simplification:
+  - added shared analytics envelope builders in `evm/scripts/analytics_envelopes.py` for success payloads and range/summary/scan/checkpoint result composition,
+  - added shared analytics runtime prelude helper (`_analytics_runtime_or_exit`) to remove repeated manifest/env/executor setup from analytics commands,
+  - extracted analytics row decode loops into `evm/scripts/analytics_decoders.py` for swap-flow and factory-new-pools handlers.
+- Reduced wrapper monolith further (`evm/scripts/evm_rpc.py` now ~3.14k lines in this pass).
+- Continued monolith simplification for convenience commands:
+  - extracted ENS resolution + balance orchestration into `evm/scripts/convenience_ens_balance.py`,
+  - replaced duplicated ENS/balance logic in `evm/scripts/evm_rpc.py` with shared executor wrappers that still route through policy-gated `run_rpc_request`.
+- Re-ran full integration suite after extraction (`44 passed`).
+- Simplified arbitrage analytics architecture:
+  - extracted arbitrage engine logic from `evm/scripts/evm_rpc.py` into `evm/scripts/analytics_arbitrage.py`,
+  - introduced shared provider capability helper `evm/scripts/provider_capabilities.py` and reused it in trace + analytics.
+- Added `analytics arbitrage-patterns --summary-only` for compact summary/range responses without candidate/per-block rows.
+- Added integration coverage for `--summary-only` behavior.
+- Ran a repository simplification audit focused on agent usability and reduced wrapper boilerplate.
+- Generalized analytics/runtime plumbing in `evm/scripts/evm_rpc.py`:
+  - shared render helpers (`_render_for_args`, `_render_for_args_and_exit`),
+  - shared analytics helpers for range resolution and log scan error handling,
+  - shared analytics parser argument bundles.
+- Added simplification audit learning note (`docs/learnings/2026-02-08-repo-simplification-audit.md`).
+- Enhanced `analytics arbitrage-patterns`:
+  - added range scanning support via `--last-blocks` / `--since` (in addition to `--block`),
+  - added `eth_getBlockReceipts` fast-path with automatic fallback to `eth_getTransactionReceipt`,
+  - added aggregate window summaries and receipt-source counters in output.
+- Expanded analytics integration tests for new arbitrage scan behavior:
+  - range-mode coverage,
+  - `eth_getBlockReceipts` unsupported fallback coverage.
+- Updated learning note with window-scan and receipt-collection learnings (`docs/learnings/2026-02-08-arbitrage-patterns-command.md`).
 - Added `analytics arbitrage-patterns` command for block-level arbitrage-like swap route detection:
   - scans one block's transactions/receipts,
   - decodes Uniswap V2/V3 `Swap` patterns,

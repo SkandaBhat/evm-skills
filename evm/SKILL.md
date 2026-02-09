@@ -59,10 +59,16 @@ Default built-in Ethereum mainnet pool:
   - convenience commands:
     - `ens resolve <name>`
     - `balance <name-or-address> --at <tag>`
+  - convenience domain extraction:
+    - `scripts/convenience_ens_balance.py` now owns ENS resolution + balance orchestration used by wrapper commands
 - analytics foundation (initial) is implemented:
   - `analytics dex-swap-flow`
   - `analytics factory-new-pools`
   - `analytics arbitrage-patterns`
+  - shared analytics result envelope helpers: `scripts/analytics_envelopes.py`
+  - shared analytics row decoders: `scripts/analytics_decoders.py`
+  - shared analytics pool metadata helper: `scripts/analytics_pool_metadata.py`
+  - shared analytics runtime helper: `scripts/analytics_runtime.py`
   - reusable range resolver (`--last-blocks` / `--since`) and resumable scan checkpoints
 - R1 advanced capabilities (foundation + logs) are implemented:
   - `logs` command with chunked `eth_getLogs` workflows
@@ -108,8 +114,11 @@ Default built-in Ethereum mainnet pool:
   - `python3 scripts/evm_rpc.py analytics dex-swap-flow --pool 0x1111111111111111111111111111111111111111 --last-blocks 5000 --manifest references/method-manifest.json`
 - Analytics (factory new pools):
   - `python3 scripts/evm_rpc.py analytics factory-new-pools --factory 0x1111111111111111111111111111111111111111 --protocol uniswap-v2 --since 24h --manifest references/method-manifest.json`
-- Analytics (block-level arbitrage pattern scan):
+- Analytics (block/window arbitrage pattern scan):
   - `python3 scripts/evm_rpc.py analytics arbitrage-patterns --block latest --manifest references/method-manifest.json`
+  - `python3 scripts/evm_rpc.py analytics arbitrage-patterns --last-blocks 10 --manifest references/method-manifest.json`
+  - `python3 scripts/evm_rpc.py analytics arbitrage-patterns --last-blocks 10 --summary-only --manifest references/method-manifest.json`
+  - `python3 scripts/evm_rpc.py analytics arbitrage-patterns --last-blocks 100 --limit 100 --page 2 --page-size 10 --manifest references/method-manifest.json`
 - Extract result for piping:
   - `python3 scripts/evm_rpc.py exec --manifest references/method-manifest.json --request-json '{"method":"eth_blockNumber","params":[]}' --result-only`
   - `python3 scripts/evm_rpc.py chain --manifest references/method-manifest.json --request-json '{"steps":[{"id":"b","method":"eth_blockNumber","params":[]}]}' --select '$.outputs.b.result'`

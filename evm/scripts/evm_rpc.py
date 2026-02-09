@@ -47,21 +47,24 @@ from error_map import (  # noqa: E402
 from adapters import validate_adapter_preflight  # noqa: E402
 from abi_codec import decode_log, event_topic0, run_abi_operation  # noqa: E402
 from analytics_aggregators import summarize_swap_rows  # noqa: E402
+from analytics_arbitrage import parse_arbitrage_block_tag, scan_arbitrage_blocks  # noqa: E402
+from analytics_decoders import decode_factory_new_pool_rows, decode_swap_flow_rows  # noqa: E402
+from analytics_envelopes import build_ok_payload, build_scan_result  # noqa: E402
+from analytics_pool_metadata import fetch_uniswap_v2_pool_metadata  # noqa: E402
+from analytics_runtime import (  # noqa: E402
+    resolve_range_or_exit as analytics_resolve_range_or_exit,
+    runtime_or_exit as analytics_runtime_or_exit,
+    scan_logs_or_exit as analytics_scan_logs_or_exit,
+)
 from analytics_registry import (  # noqa: E402
-    ERC20_DECIMALS_SELECTOR,
     UNISWAP_V2_PAIR_CREATED_EVENT,
     UNISWAP_V2_PAIR_CREATED_TOPIC0,
-    UNISWAP_V2_SWAP_EVENT,
     UNISWAP_V2_SWAP_TOPIC0,
-    UNISWAP_V2_TOKEN0_SELECTOR,
-    UNISWAP_V2_TOKEN1_SELECTOR,
     UNISWAP_V3_POOL_CREATED_EVENT,
     UNISWAP_V3_POOL_CREATED_TOPIC0,
-    UNISWAP_V3_SWAP_TOPIC0,
 )
-from analytics_scanner import scan_logs  # noqa: E402
-from analytics_time_range import resolve_block_window  # noqa: E402
 from cast_adapter import cast_format_units  # noqa: E402
+from convenience_ens_balance import resolve_balance, resolve_ens_address  # noqa: E402
 from method_registry import load_manifest_by_method, load_json  # noqa: E402
 from multicall_engine import normalize_multicall_request, run_multicall  # noqa: E402
 from policy_eval import evaluate_policy  # noqa: E402
@@ -87,10 +90,7 @@ from logs_engine import (  # noqa: E402
 
 DEFAULT_MANIFEST = (SCRIPT_DIR.parent / "references" / "method-manifest.json").resolve()
 
-ENS_REGISTRY = "0x00000000000c2e074ec69a0dfb2997ba6c7d2e1e"
-ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
-HEX32_RE = re.compile(r"^0x[0-9a-fA-F]{64}$")
 TEMPLATE_FULL_RE = re.compile(r"^\{\{\s*([^{}]+?)\s*\}\}$")
 TEMPLATE_ANY_RE = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
 
@@ -101,15 +101,6 @@ KNOWN_EVENT_SIGNATURES: dict[str, str] = {
 ERC20_TRANSFER_EVENT_DECL = "Transfer(address indexed from,address indexed to,uint256 value)"
 # Fixed keccak256("Transfer(address,address,uint256)") topic0.
 ERC20_TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-ARBITRAGE_KNOWN_SYMBOLS: dict[str, str] = {
-    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": "WETH",
-    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": "USDC",
-    "0xdac17f958d2ee523a2206206994597c13d831ec7": "USDT",
-    "0x6b175474e89094c44da98b954eedeac495271d0f": "DAI",
-    "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": "WBTC",
-    "0xae7ab96520de3a18e5e111b5eaab095312d7fe84": "stETH",
-    "0x7f39c581f595b53c5cb6a5f1a9f8da6c935e2ca0": "wstETH",
-}
 
 
 def _json_dump(payload: Any, pretty: bool = True) -> str:
@@ -653,6 +644,34 @@ def _render_output(
     return 0
 
 
+def _render_for_args(
+    *,
+    args: argparse.Namespace,
+    payload: dict[str, Any],
+    result_field: str = "result",
+) -> int:
+    return _render_output(
+        payload=payload,
+        compact=bool(args.compact),
+        result_only=bool(args.result_only),
+        select=args.select,
+        result_field=result_field,
+    )
+
+
+def _render_for_args_and_exit(
+    *,
+    args: argparse.Namespace,
+    payload: dict[str, Any],
+    exit_code: int,
+    result_field: str = "result",
+) -> int:
+    render_rc = _render_for_args(args=args, payload=payload, result_field=result_field)
+    if render_rc != 0:
+        return render_rc
+    return int(exit_code)
+
+
 def cmd_exec(args: argparse.Namespace) -> int:
     ok_manifest, manifest_or_rc = _require_manifest(args)
     if not ok_manifest:
@@ -672,16 +691,7 @@ def cmd_exec(args: argparse.Namespace) -> int:
         return 2
 
     exit_code, payload = run_rpc_request(req=req, manifest_by_method=manifest_by_method)
-    render_rc = _render_output(
-        payload=payload,
-        compact=args.compact,
-        result_only=bool(args.result_only),
-        select=args.select,
-        result_field="result",
-    )
-    if render_rc != 0:
-        return render_rc
-    return exit_code
+    return _render_for_args_and_exit(args=args, payload=payload, exit_code=exit_code, result_field="result")
 
 
 def _parse_logs_request_from_args(args: argparse.Namespace) -> dict[str, Any]:
@@ -2165,162 +2175,6 @@ def _trim_decimal_string(value: str) -> str:
     return whole if not frac else f"{whole}.{frac}"
 
 
-def _make_analytics_executor(
-    *,
-    manifest_by_method: dict[str, dict[str, Any]],
-    default_context: dict[str, Any],
-    default_env: dict[str, Any],
-    default_timeout_seconds: float,
-) -> Any:
-    def execute(req: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-        merged = dict(req)
-        req_ctx = merged.get("context")
-        context_out = dict(default_context)
-        if isinstance(req_ctx, dict):
-            context_out.update(req_ctx)
-        merged["context"] = context_out
-
-        req_env = merged.get("env")
-        env_out = dict(default_env)
-        if isinstance(req_env, dict):
-            env_out.update(req_env)
-        if env_out:
-            merged["env"] = env_out
-        else:
-            merged.pop("env", None)
-
-        if "timeout_seconds" not in merged:
-            merged["timeout_seconds"] = float(default_timeout_seconds)
-        return run_rpc_request(req=merged, manifest_by_method=manifest_by_method)
-
-    return execute
-
-
-def _analytics_hex_to_int(value: Any) -> tuple[bool, int, str]:
-    if not isinstance(value, str):
-        return False, 0, "expected hex quantity string"
-    try:
-        if value.startswith("0x"):
-            return True, int(value, 16), ""
-        return True, int(value, 10), ""
-    except Exception:  # noqa: BLE001
-        return False, 0, f"invalid quantity: {value}"
-
-
-def _analytics_eth_call_result(
-    *,
-    to: str,
-    data: str,
-    block_tag: str,
-    execute_rpc: Any,
-) -> tuple[int, dict[str, Any] | None, str | None]:
-    req = {
-        "method": "eth_call",
-        "params": [{"to": to, "data": data}, block_tag],
-    }
-    rc, payload = execute_rpc(req)
-    if rc != 0:
-        return rc, payload, None
-    result = payload.get("result")
-    if not isinstance(result, str):
-        return 2, _build_error_payload(
-            method="analytics",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message="eth_call returned non-string result",
-        ), None
-    return 0, None, result
-
-
-def _analytics_word_to_address(word_hex: str) -> tuple[bool, str, str]:
-    ok, value, err = apply_transform("slice_last_20_bytes_to_address", word_hex)
-    if not ok or not isinstance(value, str):
-        return False, "", err or "failed to decode address"
-    return True, value, ""
-
-
-def _analytics_fetch_pool_metadata(
-    *,
-    pool: str,
-    block_tag: str,
-    execute_rpc: Any,
-) -> tuple[int, dict[str, Any]]:
-    rc0, cause0, token0_raw = _analytics_eth_call_result(
-        to=pool,
-        data=UNISWAP_V2_TOKEN0_SELECTOR,
-        block_tag=block_tag,
-        execute_rpc=execute_rpc,
-    )
-    if rc0 != 0 or token0_raw is None:
-        return rc0, _wrap_stage_failure("analytics.dex_swap_flow", "token0()", cause0 or {})
-    rc1, cause1, token1_raw = _analytics_eth_call_result(
-        to=pool,
-        data=UNISWAP_V2_TOKEN1_SELECTOR,
-        block_tag=block_tag,
-        execute_rpc=execute_rpc,
-    )
-    if rc1 != 0 or token1_raw is None:
-        return rc1, _wrap_stage_failure("analytics.dex_swap_flow", "token1()", cause1 or {})
-
-    ok0, token0, err0 = _analytics_word_to_address(token0_raw)
-    if not ok0:
-        return 2, _build_error_payload(
-            method="analytics.dex_swap_flow",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=f"token0 decode failed: {err0}",
-        )
-    ok1, token1, err1 = _analytics_word_to_address(token1_raw)
-    if not ok1:
-        return 2, _build_error_payload(
-            method="analytics.dex_swap_flow",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=f"token1 decode failed: {err1}",
-        )
-
-    def read_decimals(token: str) -> tuple[int, dict[str, Any] | None, int | None]:
-        rc, cause, raw = _analytics_eth_call_result(
-            to=token,
-            data=ERC20_DECIMALS_SELECTOR,
-            block_tag=block_tag,
-            execute_rpc=execute_rpc,
-        )
-        if rc != 0 or raw is None:
-            return rc, cause, None
-        ok, val, err = _analytics_hex_to_int(raw)
-        if not ok:
-            return 2, _build_error_payload(
-                method="analytics.dex_swap_flow",
-                status="error",
-                code=ERR_INVALID_REQUEST,
-                message=f"decimals decode failed for {token}: {err}",
-            ), None
-        return 0, None, int(val)
-
-    rcd0, caused0, decimals0 = read_decimals(token0)
-    if rcd0 != 0 or decimals0 is None:
-        return rcd0, _wrap_stage_failure(
-            "analytics.dex_swap_flow",
-            f"decimals() token0 {token0}",
-            caused0 or {},
-        )
-    rcd1, caused1, decimals1 = read_decimals(token1)
-    if rcd1 != 0 or decimals1 is None:
-        return rcd1, _wrap_stage_failure(
-            "analytics.dex_swap_flow",
-            f"decimals() token1 {token1}",
-            caused1 or {},
-        )
-
-    return 0, {
-        "token0": token0.lower(),
-        "token1": token1.lower(),
-        "decimals0": decimals0,
-        "decimals1": decimals1,
-    }
-
-
 def _format_units_or_raw(raw_value: str, decimals: int) -> str:
     try:
         return _trim_decimal_string(cast_format_units(raw_value, decimals))
@@ -2329,19 +2183,17 @@ def _format_units_or_raw(raw_value: str, decimals: int) -> str:
 
 
 def cmd_analytics_dex_swap_flow(args: argparse.Namespace) -> int:
-    ok_manifest, manifest_or_rc = _require_manifest(args)
-    if not ok_manifest:
-        return int(manifest_or_rc)
-    manifest_by_method = manifest_or_rc
-
-    ok_env, env_or_rc = _require_env_json(
-        raw_env_json=args.env_json,
+    ok_runtime, runtime_or_rc = analytics_runtime_or_exit(
+        args=args,
         method="analytics.dex_swap_flow",
-        compact=bool(args.compact),
+        default_context={"allow_heavy_read": bool(args.allow_heavy_read)},
+        require_manifest_fn=_require_manifest,
+        require_env_json_fn=_require_env_json,
+        run_rpc_request_fn=run_rpc_request,
     )
-    if not ok_env:
-        return int(env_or_rc)
-    env = env_or_rc
+    if not ok_runtime:
+        return int(runtime_or_rc)
+    env, context, timeout_seconds, execute_rpc = runtime_or_rc
 
     pool = str(args.pool).strip().lower()
     if not ADDRESS_RE.fullmatch(pool):
@@ -2354,66 +2206,40 @@ def cmd_analytics_dex_swap_flow(args: argparse.Namespace) -> int:
         )
         return 2
 
-    context = {
-        "allow_heavy_read": bool(args.allow_heavy_read),
-    }
-    execute_rpc = _make_analytics_executor(
-        manifest_by_method=manifest_by_method,
-        default_context=context,
-        default_env=env,
-        default_timeout_seconds=float(args.timeout_seconds),
-    )
-
-    range_rc, range_payload = resolve_block_window(
+    ok_range, range_payload_or_rc = analytics_resolve_range_or_exit(
+        args=args,
+        command_method="analytics.dex_swap_flow",
         execute_rpc=execute_rpc,
         context=context,
         env=env,
-        timeout_seconds=float(args.timeout_seconds),
+        timeout_seconds=timeout_seconds,
         last_blocks=args.last_blocks,
         since=args.since,
+        build_error_payload_fn=_build_error_payload,
+        render_for_args_and_exit_fn=_render_for_args_and_exit,
     )
-    if range_rc != 0:
-        payload = _build_error_payload(
-            method="analytics.dex_swap_flow",
-            status="error",
-            code=str(range_payload.get("error_code", ERR_INVALID_REQUEST)),
-            message=str(range_payload.get("error_message", "failed to resolve range")),
-        )
-        if "cause" in range_payload:
-            payload["cause"] = range_payload["cause"]
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return range_rc
+    if not ok_range:
+        return int(range_payload_or_rc)
+    range_payload = range_payload_or_rc
 
     from_block = int(range_payload["from_block"])
     to_block = int(range_payload["to_block"])
     to_block_tag = hex(to_block)
 
-    meta_rc, meta_payload = _analytics_fetch_pool_metadata(
+    meta_rc, meta_payload = fetch_uniswap_v2_pool_metadata(
         pool=pool,
         block_tag=to_block_tag,
         execute_rpc=execute_rpc,
+        build_error_payload=_build_error_payload,
+        wrap_stage_failure=_wrap_stage_failure,
+        apply_transform_fn=apply_transform,
     )
     if meta_rc != 0:
-        render_rc = _render_output(
-            payload=meta_payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return meta_rc
+        return _render_for_args_and_exit(args=args, payload=meta_payload, exit_code=meta_rc, result_field="result")
 
-    scan_rc, scan_payload = scan_logs(
+    ok_scan, scan_payload_or_rc = analytics_scan_logs_or_exit(
+        args=args,
+        command_method="analytics.dex_swap_flow",
         execute_rpc=execute_rpc,
         logs_filter={
             "address": pool,
@@ -2423,7 +2249,7 @@ def cmd_analytics_dex_swap_flow(args: argparse.Namespace) -> int:
         },
         context=context,
         env=env,
-        timeout_seconds=float(args.timeout_seconds),
+        timeout_seconds=timeout_seconds,
         chunk_size=int(args.chunk_size),
         max_chunks=int(args.max_chunks),
         max_logs=int(args.max_logs),
@@ -2431,69 +2257,24 @@ def cmd_analytics_dex_swap_flow(args: argparse.Namespace) -> int:
         allow_heavy_read=bool(args.allow_heavy_read),
         checkpoint_file=args.checkpoint_file,
         filter_signature={"command": "dex-swap-flow", "pool": pool},
+        build_error_payload_fn=_build_error_payload,
+        render_for_args_and_exit_fn=_render_for_args_and_exit,
     )
-    if scan_rc != 0 or not bool(scan_payload.get("ok", False)):
-        payload = _build_error_payload(
-            method="analytics.dex_swap_flow",
-            status="error",
-            code=str(scan_payload.get("error_code", ERR_INTERNAL)),
-            message=str(scan_payload.get("error_message", "log scan failed")),
-        )
-        payload["scan"] = scan_payload
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return scan_rc
+    if not ok_scan:
+        return int(scan_payload_or_rc)
+    scan_payload = scan_payload_or_rc
 
     token0 = str(meta_payload["token0"])
     token1 = str(meta_payload["token1"])
     decimals0 = int(meta_payload["decimals0"])
     decimals1 = int(meta_payload["decimals1"])
 
-    rows: list[dict[str, Any]] = []
-    decode_failures = 0
-    for item in list(scan_payload.get("result", [])):
-        if not isinstance(item, dict):
-            decode_failures += 1
-            continue
-        try:
-            decoded = decode_log(
-                UNISWAP_V2_SWAP_EVENT,
-                list(item.get("topics", [])),
-                str(item.get("data", "0x")),
-                anonymous=False,
-            )
-            args_out = decoded.get("args", [])
-            row = {
-                "block_number": item.get("blockNumber"),
-                "tx_hash": item.get("transactionHash"),
-                "log_index": item.get("logIndex"),
-                "sender": str(args_out[0].get("value")).lower(),
-                "to": str(args_out[5].get("value")).lower(),
-                "amount0_in_raw": str(args_out[1].get("value")),
-                "amount1_in_raw": str(args_out[2].get("value")),
-                "amount0_out_raw": str(args_out[3].get("value")),
-                "amount1_out_raw": str(args_out[4].get("value")),
-            }
-            amount0_net = int(row["amount0_in_raw"]) - int(row["amount0_out_raw"])
-            amount1_net = int(row["amount1_in_raw"]) - int(row["amount1_out_raw"])
-            row["pool_token0_net_raw"] = str(amount0_net)
-            row["pool_token1_net_raw"] = str(amount1_net)
-            row["pool_token0_net"] = _format_units_or_raw(str(amount0_net), decimals0)
-            row["pool_token1_net"] = _format_units_or_raw(str(amount1_net), decimals1)
-            row["amount0_in"] = _format_units_or_raw(row["amount0_in_raw"], decimals0)
-            row["amount0_out"] = _format_units_or_raw(row["amount0_out_raw"], decimals0)
-            row["amount1_in"] = _format_units_or_raw(row["amount1_in_raw"], decimals1)
-            row["amount1_out"] = _format_units_or_raw(row["amount1_out_raw"], decimals1)
-            rows.append(row)
-        except Exception:
-            decode_failures += 1
+    rows, decode_failures = decode_swap_flow_rows(
+        items=list(scan_payload.get("result", [])),
+        decimals0=decimals0,
+        decimals1=decimals1,
+        format_units_fn=_format_units_or_raw,
+    )
 
     if args.limit is not None:
         rows = rows[: int(args.limit)]
@@ -2505,55 +2286,35 @@ def cmd_analytics_dex_swap_flow(args: argparse.Namespace) -> int:
     summary["token0_volume"] = _format_units_or_raw(summary["token0_volume_raw"], decimals0)
     summary["token1_volume"] = _format_units_or_raw(summary["token1_volume_raw"], decimals1)
 
-    result = {
-        "pool": pool,
-        "token0": token0,
-        "token1": token1,
-        "token0_decimals": decimals0,
-        "token1_decimals": decimals1,
-        "range": range_payload,
-        "rows": rows,
-        "summary": summary,
-        "scan_summary": scan_payload.get("summary", {}),
-    }
-    if "checkpoint" in scan_payload:
-        result["checkpoint"] = scan_payload["checkpoint"]
-
-    payload = {
-        "timestamp_utc": _timestamp(),
-        "method": "analytics.dex_swap_flow",
-        "status": "ok",
-        "ok": True,
-        "error_code": None,
-        "error_message": None,
-        "result": result,
-    }
-    render_rc = _render_output(
-        payload=payload,
-        compact=args.compact,
-        result_only=bool(args.result_only),
-        select=args.select,
-        result_field="result",
+    result = build_scan_result(
+        base={
+            "pool": pool,
+            "token0": token0,
+            "token1": token1,
+            "token0_decimals": decimals0,
+            "token1_decimals": decimals1,
+            "rows": rows,
+        },
+        range_payload=range_payload,
+        summary=summary,
+        scan_payload=scan_payload,
     )
-    if render_rc != 0:
-        return render_rc
-    return 0
+    payload = build_ok_payload(method="analytics.dex_swap_flow", result=result, timestamp_fn=_timestamp)
+    return _render_for_args_and_exit(args=args, payload=payload, exit_code=0, result_field="result")
 
 
 def cmd_analytics_factory_new_pools(args: argparse.Namespace) -> int:
-    ok_manifest, manifest_or_rc = _require_manifest(args)
-    if not ok_manifest:
-        return int(manifest_or_rc)
-    manifest_by_method = manifest_or_rc
-
-    ok_env, env_or_rc = _require_env_json(
-        raw_env_json=args.env_json,
+    ok_runtime, runtime_or_rc = analytics_runtime_or_exit(
+        args=args,
         method="analytics.factory_new_pools",
-        compact=bool(args.compact),
+        default_context={"allow_heavy_read": bool(args.allow_heavy_read)},
+        require_manifest_fn=_require_manifest,
+        require_env_json_fn=_require_env_json,
+        run_rpc_request_fn=run_rpc_request,
     )
-    if not ok_env:
-        return int(env_or_rc)
-    env = env_or_rc
+    if not ok_runtime:
+        return int(runtime_or_rc)
+    env, context, timeout_seconds, execute_rpc = runtime_or_rc
 
     factory = str(args.factory).strip().lower()
     if not ADDRESS_RE.fullmatch(factory):
@@ -2566,43 +2327,21 @@ def cmd_analytics_factory_new_pools(args: argparse.Namespace) -> int:
         )
         return 2
 
-    context = {
-        "allow_heavy_read": bool(args.allow_heavy_read),
-    }
-    execute_rpc = _make_analytics_executor(
-        manifest_by_method=manifest_by_method,
-        default_context=context,
-        default_env=env,
-        default_timeout_seconds=float(args.timeout_seconds),
-    )
-
-    range_rc, range_payload = resolve_block_window(
+    ok_range, range_payload_or_rc = analytics_resolve_range_or_exit(
+        args=args,
+        command_method="analytics.factory_new_pools",
         execute_rpc=execute_rpc,
         context=context,
         env=env,
-        timeout_seconds=float(args.timeout_seconds),
+        timeout_seconds=timeout_seconds,
         last_blocks=args.last_blocks,
         since=args.since,
+        build_error_payload_fn=_build_error_payload,
+        render_for_args_and_exit_fn=_render_for_args_and_exit,
     )
-    if range_rc != 0:
-        payload = _build_error_payload(
-            method="analytics.factory_new_pools",
-            status="error",
-            code=str(range_payload.get("error_code", ERR_INVALID_REQUEST)),
-            message=str(range_payload.get("error_message", "failed to resolve range")),
-        )
-        if "cause" in range_payload:
-            payload["cause"] = range_payload["cause"]
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return range_rc
+    if not ok_range:
+        return int(range_payload_or_rc)
+    range_payload = range_payload_or_rc
 
     protocol = str(args.protocol).strip().lower()
     if protocol == "uniswap-v2":
@@ -2612,7 +2351,9 @@ def cmd_analytics_factory_new_pools(args: argparse.Namespace) -> int:
         event_decl = UNISWAP_V3_POOL_CREATED_EVENT
         topic0 = UNISWAP_V3_POOL_CREATED_TOPIC0
 
-    scan_rc, scan_payload = scan_logs(
+    ok_scan, scan_payload_or_rc = analytics_scan_logs_or_exit(
+        args=args,
+        command_method="analytics.factory_new_pools",
         execute_rpc=execute_rpc,
         logs_filter={
             "address": factory,
@@ -2622,7 +2363,7 @@ def cmd_analytics_factory_new_pools(args: argparse.Namespace) -> int:
         },
         context=context,
         env=env,
-        timeout_seconds=float(args.timeout_seconds),
+        timeout_seconds=timeout_seconds,
         chunk_size=int(args.chunk_size),
         max_chunks=int(args.max_chunks),
         max_logs=int(args.max_logs),
@@ -2630,395 +2371,51 @@ def cmd_analytics_factory_new_pools(args: argparse.Namespace) -> int:
         allow_heavy_read=bool(args.allow_heavy_read),
         checkpoint_file=args.checkpoint_file,
         filter_signature={"command": "factory-new-pools", "factory": factory, "protocol": protocol},
+        build_error_payload_fn=_build_error_payload,
+        render_for_args_and_exit_fn=_render_for_args_and_exit,
     )
-    if scan_rc != 0 or not bool(scan_payload.get("ok", False)):
-        payload = _build_error_payload(
-            method="analytics.factory_new_pools",
-            status="error",
-            code=str(scan_payload.get("error_code", ERR_INTERNAL)),
-            message=str(scan_payload.get("error_message", "log scan failed")),
-        )
-        payload["scan"] = scan_payload
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return scan_rc
+    if not ok_scan:
+        return int(scan_payload_or_rc)
+    scan_payload = scan_payload_or_rc
 
-    rows: list[dict[str, Any]] = []
-    decode_failures = 0
-    for item in list(scan_payload.get("result", [])):
-        if not isinstance(item, dict):
-            decode_failures += 1
-            continue
-        try:
-            decoded = decode_log(
-                event_decl,
-                list(item.get("topics", [])),
-                str(item.get("data", "0x")),
-                anonymous=False,
-            )
-            args_out = decoded.get("args", [])
-            if protocol == "uniswap-v2":
-                row = {
-                    "block_number": item.get("blockNumber"),
-                    "tx_hash": item.get("transactionHash"),
-                    "log_index": item.get("logIndex"),
-                    "token0": str(args_out[0].get("value")).lower(),
-                    "token1": str(args_out[1].get("value")).lower(),
-                    "pool": str(args_out[2].get("value")).lower(),
-                    "pair_index_raw": str(args_out[3].get("value")),
-                }
-            else:
-                row = {
-                    "block_number": item.get("blockNumber"),
-                    "tx_hash": item.get("transactionHash"),
-                    "log_index": item.get("logIndex"),
-                    "token0": str(args_out[0].get("value")).lower(),
-                    "token1": str(args_out[1].get("value")).lower(),
-                    "fee_raw": str(args_out[2].get("value")),
-                    "tick_spacing_raw": str(args_out[3].get("value")),
-                    "pool": str(args_out[4].get("value")).lower(),
-                }
-            rows.append(row)
-        except Exception:
-            decode_failures += 1
+    rows, decode_failures = decode_factory_new_pool_rows(
+        items=list(scan_payload.get("result", [])),
+        protocol=protocol,
+        event_decl=event_decl,
+    )
 
     if args.limit is not None:
         rows = rows[: int(args.limit)]
 
-    result = {
-        "factory": factory,
-        "protocol": protocol,
-        "range": range_payload,
-        "rows": rows,
-        "summary": {
+    result = build_scan_result(
+        base={
+            "factory": factory,
+            "protocol": protocol,
+            "rows": rows,
+        },
+        range_payload=range_payload,
+        summary={
             "events": len(rows),
             "decode_failures": decode_failures,
         },
-        "scan_summary": scan_payload.get("summary", {}),
-    }
-    if "checkpoint" in scan_payload:
-        result["checkpoint"] = scan_payload["checkpoint"]
-
-    payload = {
-        "timestamp_utc": _timestamp(),
-        "method": "analytics.factory_new_pools",
-        "status": "ok",
-        "ok": True,
-        "error_code": None,
-        "error_message": None,
-        "result": result,
-    }
-    render_rc = _render_output(
-        payload=payload,
-        compact=args.compact,
-        result_only=bool(args.result_only),
-        select=args.select,
-        result_field="result",
+        scan_payload=scan_payload,
     )
-    if render_rc != 0:
-        return render_rc
-    return 0
-
-
-def _analytics_parse_block_tag(raw_block: str | None) -> tuple[bool, str, str]:
-    block_tag = str(raw_block or "latest").strip().lower()
-    if not block_tag:
-        return True, "latest", ""
-    if block_tag in {"latest", "earliest", "pending", "safe", "finalized"}:
-        return True, block_tag, ""
-    try:
-        block_number = parse_nonnegative_quantity_str(block_tag)
-    except Exception:  # noqa: BLE001
-        return (
-            False,
-            "",
-            "block must be latest/earliest/pending/safe/finalized or a non-negative block number",
-        )
-    return True, hex(block_number), ""
-
-
-def _analytics_decode_uint256_word(word_hex: str) -> tuple[bool, int]:
-    if not isinstance(word_hex, str) or len(word_hex) != 64:
-        return False, 0
-    try:
-        return True, int(word_hex, 16)
-    except Exception:  # noqa: BLE001
-        return False, 0
-
-
-def _analytics_decode_int256_word(word_hex: str) -> tuple[bool, int]:
-    ok, as_uint = _analytics_decode_uint256_word(word_hex)
-    if not ok:
-        return False, 0
-    if as_uint >= 2**255:
-        return True, as_uint - 2**256
-    return True, as_uint
-
-
-def _analytics_token_label(token: str) -> str:
-    as_lower = str(token).lower()
-    symbol = ARBITRAGE_KNOWN_SYMBOLS.get(as_lower)
-    if symbol:
-        return symbol
-    if len(as_lower) < 10:
-        return as_lower
-    return f"{as_lower[:6]}...{as_lower[-4:]}"
-
-
-def _analytics_format_path(tokens: list[str]) -> str:
-    return " -> ".join(_analytics_token_label(token) for token in tokens)
-
-
-def _analytics_fetch_pool_tokens_for_arbitrage(
-    *,
-    pool: str,
-    block_tag: str,
-    execute_rpc: Any,
-) -> tuple[int, dict[str, Any], tuple[str | None, str | None]]:
-    rc0, cause0, token0_raw = _analytics_eth_call_result(
-        to=pool,
-        data=UNISWAP_V2_TOKEN0_SELECTOR,
-        block_tag=block_tag,
-        execute_rpc=execute_rpc,
-    )
-    if rc0 != 0 or token0_raw is None:
-        payload = _wrap_stage_failure(
-            "analytics.arbitrage_patterns",
-            f"token0() pool {pool}",
-            cause0 or {},
-        )
-        return rc0, payload, (None, None)
-
-    rc1, cause1, token1_raw = _analytics_eth_call_result(
-        to=pool,
-        data=UNISWAP_V2_TOKEN1_SELECTOR,
-        block_tag=block_tag,
-        execute_rpc=execute_rpc,
-    )
-    if rc1 != 0 or token1_raw is None:
-        payload = _wrap_stage_failure(
-            "analytics.arbitrage_patterns",
-            f"token1() pool {pool}",
-            cause1 or {},
-        )
-        return rc1, payload, (None, None)
-
-    ok0, token0, err0 = _analytics_word_to_address(token0_raw)
-    if not ok0:
-        payload = _build_error_payload(
-            method="analytics.arbitrage_patterns",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=f"token0 decode failed for pool {pool}: {err0}",
-        )
-        return 2, payload, (None, None)
-
-    ok1, token1, err1 = _analytics_word_to_address(token1_raw)
-    if not ok1:
-        payload = _build_error_payload(
-            method="analytics.arbitrage_patterns",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=f"token1 decode failed for pool {pool}: {err1}",
-        )
-        return 2, payload, (None, None)
-
-    return 0, {}, (token0.lower(), token1.lower())
-
-
-def _analytics_decode_swap_for_arbitrage(
-    *,
-    log_item: dict[str, Any],
-    topic0: str,
-    pool: str,
-    token0: str,
-    token1: str,
-    log_index: int,
-) -> tuple[bool, dict[str, Any] | None]:
-    data = log_item.get("data")
-    if not isinstance(data, str) or not data.startswith("0x"):
-        return False, None
-    body = data[2:]
-
-    if topic0 == UNISWAP_V2_SWAP_TOPIC0:
-        if len(body) < 64 * 4:
-            return False, None
-        words = [body[i : i + 64] for i in range(0, 64 * 4, 64)]
-        ok0, amount0_in = _analytics_decode_uint256_word(words[0])
-        ok1, amount1_in = _analytics_decode_uint256_word(words[1])
-        ok2, amount0_out = _analytics_decode_uint256_word(words[2])
-        ok3, amount1_out = _analytics_decode_uint256_word(words[3])
-        if not all((ok0, ok1, ok2, ok3)):
-            return False, None
-
-        in_token: str | None = None
-        out_token: str | None = None
-        in_amount = 0
-        out_amount = 0
-        if amount0_in > 0 and amount1_out > 0:
-            in_token = token0
-            out_token = token1
-            in_amount = amount0_in
-            out_amount = amount1_out
-        elif amount1_in > 0 and amount0_out > 0:
-            in_token = token1
-            out_token = token0
-            in_amount = amount1_in
-            out_amount = amount0_out
-        if not in_token or not out_token:
-            return False, None
-
-        return True, {
-            "log_index": log_index,
-            "pool": pool,
-            "version": "v2",
-            "in_token": in_token,
-            "out_token": out_token,
-            "in_amount_raw": str(in_amount),
-            "out_amount_raw": str(out_amount),
-        }
-
-    if topic0 == UNISWAP_V3_SWAP_TOPIC0:
-        if len(body) < 64 * 2:
-            return False, None
-        word0 = body[0:64]
-        word1 = body[64:128]
-        ok0, amount0 = _analytics_decode_int256_word(word0)
-        ok1, amount1 = _analytics_decode_int256_word(word1)
-        if not ok0 or not ok1:
-            return False, None
-
-        in_token: str | None = None
-        out_token: str | None = None
-        in_amount = 0
-        out_amount = 0
-        if amount0 > 0 and amount1 < 0:
-            in_token = token0
-            out_token = token1
-            in_amount = amount0
-            out_amount = -amount1
-        elif amount1 > 0 and amount0 < 0:
-            in_token = token1
-            out_token = token0
-            in_amount = amount1
-            out_amount = -amount0
-        if not in_token or not out_token:
-            return False, None
-
-        return True, {
-            "log_index": log_index,
-            "pool": pool,
-            "version": "v3",
-            "in_token": in_token,
-            "out_token": out_token,
-            "in_amount_raw": str(in_amount),
-            "out_amount_raw": str(out_amount),
-        }
-
-    return False, None
-
-
-def _analytics_build_arbitrage_candidate(
-    *,
-    tx_hash: str,
-    tx_from: str | None,
-    tx_to: str | None,
-    tx_value: Any,
-    swaps: list[dict[str, Any]],
-    min_swaps: int,
-    include_swaps: bool,
-) -> dict[str, Any] | None:
-    if len(swaps) < min_swaps:
-        return None
-
-    unique_pools = len({str(item.get("pool", "")).lower() for item in swaps if item.get("pool")})
-    versions = sorted({str(item.get("version", "")) for item in swaps if item.get("version")})
-
-    continuity_links = 0
-    for idx in range(len(swaps) - 1):
-        out_token = str(swaps[idx].get("out_token", "")).lower()
-        next_in = str(swaps[idx + 1].get("in_token", "")).lower()
-        if out_token and next_in and out_token == next_in:
-            continuity_links += 1
-
-    first_in = str(swaps[0].get("in_token", "")).lower()
-    last_out = str(swaps[-1].get("out_token", "")).lower()
-    has_cycle = bool(first_in and last_out and first_in == last_out)
-
-    cycle_gain_raw: str | None = None
-    if has_cycle:
-        try:
-            first_in_amount = int(str(swaps[0].get("in_amount_raw", "0")), 10)
-            last_out_amount = int(str(swaps[-1].get("out_amount_raw", "0")), 10)
-            cycle_gain_raw = str(last_out_amount - first_in_amount)
-        except Exception:  # noqa: BLE001
-            cycle_gain_raw = None
-
-    reasons: list[str] = []
-    if has_cycle:
-        reasons.append("cyclic path (token returns to start)")
-    if continuity_links >= 1 and unique_pools >= 2:
-        reasons.append("multi-pool routed swaps in one tx")
-    if len(versions) > 1:
-        reasons.append("mixed Uniswap V2 + V3 swaps")
-
-    is_candidate = (
-        has_cycle
-        or (continuity_links >= 1 and len(swaps) >= 3)
-        or (len(versions) > 1 and len(swaps) >= 2)
-    )
-    if not is_candidate:
-        return None
-
-    path_tokens: list[str] = []
-    if first_in:
-        path_tokens.append(first_in)
-    for item in swaps:
-        out_token = str(item.get("out_token", "")).lower()
-        if out_token:
-            path_tokens.append(out_token)
-
-    candidate: dict[str, Any] = {
-        "tx_hash": tx_hash,
-        "from": tx_from,
-        "to": tx_to,
-        "value_wei": tx_value,
-        "swap_count": len(swaps),
-        "unique_pools": unique_pools,
-        "versions": versions,
-        "continuity_links": continuity_links,
-        "has_cycle": has_cycle,
-        "cycle_gain_raw": cycle_gain_raw,
-        "reasons": reasons,
-        "path_tokens": path_tokens,
-        "path_display": _analytics_format_path(path_tokens),
-    }
-    if include_swaps:
-        candidate["swaps"] = swaps
-    return candidate
+    payload = build_ok_payload(method="analytics.factory_new_pools", result=result, timestamp_fn=_timestamp)
+    return _render_for_args_and_exit(args=args, payload=payload, exit_code=0, result_field="result")
 
 
 def cmd_analytics_arbitrage_patterns(args: argparse.Namespace) -> int:
-    ok_manifest, manifest_or_rc = _require_manifest(args)
-    if not ok_manifest:
-        return int(manifest_or_rc)
-    manifest_by_method = manifest_or_rc
-
-    ok_env, env_or_rc = _require_env_json(
-        raw_env_json=args.env_json,
+    ok_runtime, runtime_or_rc = analytics_runtime_or_exit(
+        args=args,
         method="analytics.arbitrage_patterns",
-        compact=bool(args.compact),
+        default_context={},
+        require_manifest_fn=_require_manifest,
+        require_env_json_fn=_require_env_json,
+        run_rpc_request_fn=run_rpc_request,
     )
-    if not ok_env:
-        return int(env_or_rc)
-    env = env_or_rc
+    if not ok_runtime:
+        return int(runtime_or_rc)
+    env, context, timeout_seconds, execute_rpc = runtime_or_rc
 
     limit = int(args.limit)
     if limit < 0:
@@ -3030,6 +2427,31 @@ def cmd_analytics_arbitrage_patterns(args: argparse.Namespace) -> int:
             pretty=not args.compact,
         )
         return 2
+
+    page = int(args.page)
+    if page <= 0:
+        _print_error(
+            method="analytics.arbitrage_patterns",
+            status="error",
+            code=ERR_INVALID_REQUEST,
+            message="page must be a positive integer",
+            pretty=not args.compact,
+        )
+        return 2
+
+    if args.page_size is None:
+        page_size = limit if limit > 0 else 0
+    else:
+        page_size = int(args.page_size)
+        if page_size <= 0:
+            _print_error(
+                method="analytics.arbitrage_patterns",
+                status="error",
+                code=ERR_INVALID_REQUEST,
+                message="page-size must be a positive integer",
+                pretty=not args.compact,
+            )
+            return 2
 
     min_swaps = int(args.min_swaps)
     if min_swaps < 2:
@@ -3055,415 +2477,190 @@ def cmd_analytics_arbitrage_patterns(args: argparse.Namespace) -> int:
             )
             return 2
 
-    ok_block, block_tag, block_err = _analytics_parse_block_tag(args.block)
-    if not ok_block:
+    has_window = args.last_blocks is not None or args.since is not None
+    if has_window and args.block is not None:
         _print_error(
             method="analytics.arbitrage_patterns",
             status="error",
             code=ERR_INVALID_REQUEST,
-            message=block_err,
+            message="--block cannot be combined with --last-blocks or --since",
             pretty=not args.compact,
         )
         return 2
 
-    execute_rpc = _make_analytics_executor(
-        manifest_by_method=manifest_by_method,
-        default_context={},
-        default_env=env,
-        default_timeout_seconds=float(args.timeout_seconds),
-    )
+    requested_block: str | None = None
+    range_payload: dict[str, Any] | None = None
+    block_tags: list[str] = []
 
-    rc_block, block_payload = execute_rpc(
-        {"method": "eth_getBlockByNumber", "params": [block_tag, True]}
-    )
-    if rc_block != 0:
-        payload = _wrap_stage_failure(
-            "analytics.arbitrage_patterns",
-            f"eth_getBlockByNumber({block_tag})",
-            block_payload,
+    if has_window:
+        ok_range, range_payload_or_rc = analytics_resolve_range_or_exit(
+            args=args,
+            command_method="analytics.arbitrage_patterns",
+            execute_rpc=execute_rpc,
+            context=context,
+            env=env,
+            timeout_seconds=timeout_seconds,
+            last_blocks=args.last_blocks,
+            since=args.since,
+            build_error_payload_fn=_build_error_payload,
+            render_for_args_and_exit_fn=_render_for_args_and_exit,
         )
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return rc_block
-
-    block_result = block_payload.get("result")
-    if not isinstance(block_result, dict):
-        payload = _build_error_payload(
-            method="analytics.arbitrage_patterns",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message="eth_getBlockByNumber returned non-object result",
-        )
-        payload["request_block"] = block_tag
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return 2
-
-    txs = block_result.get("transactions", [])
-    if not isinstance(txs, list):
-        payload = _build_error_payload(
-            method="analytics.arbitrage_patterns",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message="block.transactions must be a list",
-        )
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return 2
-
-    txs_to_scan = txs
-    if max_transactions is not None:
-        txs_to_scan = txs_to_scan[:max_transactions]
-
-    block_number_raw = block_result.get("number")
-    block_number: int | None = None
-    if isinstance(block_number_raw, str):
-        ok_number, as_number, _ = _analytics_hex_to_int(block_number_raw)
-        if ok_number:
-            block_number = as_number
-
-    block_timestamp_raw = block_result.get("timestamp")
-    block_timestamp_utc: str | None = None
-    if isinstance(block_timestamp_raw, str):
-        ok_ts, as_ts, _ = _analytics_hex_to_int(block_timestamp_raw)
-        if ok_ts:
-            try:
-                block_timestamp_utc = datetime.fromtimestamp(as_ts, tz=UTC).isoformat()
-            except Exception:  # noqa: BLE001
-                block_timestamp_utc = None
-
-    block_for_calls = block_number_raw if isinstance(block_number_raw, str) else block_tag
-
-    pool_cache: dict[str, tuple[str | None, str | None]] = {}
-    receipt_failures: list[dict[str, Any]] = []
-    pool_failures: list[dict[str, Any]] = []
-    candidates: list[dict[str, Any]] = []
-    txs_with_swaps = 0
-
-    for tx_item in txs_to_scan:
-        tx_hash: str | None = None
-        tx_from: str | None = None
-        tx_to: str | None = None
-        tx_value: Any = None
-
-        if isinstance(tx_item, dict):
-            raw_hash = tx_item.get("hash")
-            if isinstance(raw_hash, str):
-                tx_hash = raw_hash
-            raw_from = tx_item.get("from")
-            if isinstance(raw_from, str):
-                tx_from = raw_from
-            raw_to = tx_item.get("to")
-            if isinstance(raw_to, str):
-                tx_to = raw_to
-            tx_value = tx_item.get("value")
-        elif isinstance(tx_item, str):
-            tx_hash = tx_item
-
-        if not tx_hash:
-            continue
-
-        rc_receipt, receipt_payload = execute_rpc(
-            {"method": "eth_getTransactionReceipt", "params": [tx_hash]}
-        )
-        if rc_receipt != 0:
-            receipt_failures.append(
-                {
-                    "tx_hash": tx_hash,
-                    "error_code": receipt_payload.get("error_code"),
-                    "error_message": receipt_payload.get("error_message"),
-                }
+        if not ok_range:
+            return int(range_payload_or_rc)
+        resolved_range = range_payload_or_rc
+        from_block = int(resolved_range["from_block"])
+        to_block = int(resolved_range["to_block"])
+        block_tags = [hex(n) for n in range(from_block, to_block + 1)]
+        range_payload = resolved_range
+    else:
+        ok_block, block_tag, block_err = parse_arbitrage_block_tag(args.block)
+        if not ok_block:
+            _print_error(
+                method="analytics.arbitrage_patterns",
+                status="error",
+                code=ERR_INVALID_REQUEST,
+                message=block_err,
+                pretty=not args.compact,
             )
-            continue
+            return 2
+        requested_block = block_tag
+        block_tags = [block_tag]
 
-        receipt = receipt_payload.get("result")
-        if not isinstance(receipt, dict):
-            receipt_failures.append(
-                {
-                    "tx_hash": tx_hash,
-                    "error_code": ERR_INVALID_REQUEST,
-                    "error_message": "eth_getTransactionReceipt returned non-object result",
-                }
-            )
-            continue
-
-        logs = receipt.get("logs", [])
-        if not isinstance(logs, list):
-            continue
-
-        swaps: list[dict[str, Any]] = []
-        for idx, log_item in enumerate(logs):
-            if not isinstance(log_item, dict):
-                continue
-            topics = log_item.get("topics", [])
-            if not isinstance(topics, list) or not topics:
-                continue
-            if not isinstance(topics[0], str):
-                continue
-            topic0 = str(topics[0]).lower()
-            if topic0 not in {UNISWAP_V2_SWAP_TOPIC0, UNISWAP_V3_SWAP_TOPIC0}:
-                continue
-
-            pool = str(log_item.get("address", "")).lower()
-            if not ADDRESS_RE.fullmatch(pool):
-                continue
-
-            tokens = pool_cache.get(pool)
-            if tokens is None:
-                rc_pool, pool_payload, resolved_tokens = _analytics_fetch_pool_tokens_for_arbitrage(
-                    pool=pool,
-                    block_tag=block_for_calls,
-                    execute_rpc=execute_rpc,
-                )
-                pool_cache[pool] = resolved_tokens
-                tokens = resolved_tokens
-                if rc_pool != 0:
-                    pool_failures.append(
-                        {
-                            "tx_hash": tx_hash,
-                            "pool": pool,
-                            "error_code": pool_payload.get("error_code"),
-                            "error_message": pool_payload.get("error_message"),
-                        }
-                    )
-                    continue
-
-            token0, token1 = tokens
-            if not token0 or not token1:
-                continue
-
-            ok_swap, swap = _analytics_decode_swap_for_arbitrage(
-                log_item=log_item,
-                topic0=topic0,
-                pool=pool,
-                token0=token0,
-                token1=token1,
-                log_index=idx,
-            )
-            if not ok_swap or not isinstance(swap, dict):
-                continue
-            swaps.append(swap)
-
-        if not swaps:
-            continue
-        txs_with_swaps += 1
-
-        candidate = _analytics_build_arbitrage_candidate(
-            tx_hash=tx_hash,
-            tx_from=tx_from,
-            tx_to=tx_to,
-            tx_value=tx_value,
-            swaps=swaps,
-            min_swaps=min_swaps,
-            include_swaps=bool(args.include_swaps),
-        )
-        if candidate is not None:
-            candidates.append(candidate)
-
-    candidates.sort(
-        key=lambda item: (
-            1 if bool(item.get("has_cycle")) else 0,
-            int(item.get("swap_count", 0)),
-            int(item.get("continuity_links", 0)),
-            int(item.get("unique_pools", 0)),
-        ),
-        reverse=True,
+    scan_rc, scan_payload = scan_arbitrage_blocks(
+        execute_rpc=execute_rpc,
+        block_tags=block_tags,
+        min_swaps=min_swaps,
+        limit=limit,
+        max_transactions=max_transactions,
+        include_swaps=bool(args.include_swaps),
+        use_block_receipts=not bool(args.no_block_receipts),
     )
-    returned_candidates = candidates[:limit]
+    if scan_rc != 0:
+        kind = str(scan_payload.get("kind", ""))
+        if kind == "stage_failure":
+            payload = _wrap_stage_failure(
+                "analytics.arbitrage_patterns",
+                str(scan_payload.get("stage", "arbitrage scan failed")),
+                scan_payload.get("cause", {}),
+            )
+        elif kind == "invalid_response":
+            payload = _build_error_payload(
+                method="analytics.arbitrage_patterns",
+                status="error",
+                code=ERR_INVALID_REQUEST,
+                message=str(scan_payload.get("message", "invalid response during arbitrage scan")),
+            )
+            if scan_payload.get("request_block") is not None:
+                payload["request_block"] = scan_payload.get("request_block")
+        else:
+            payload = _build_error_payload(
+                method="analytics.arbitrage_patterns",
+                status="error",
+                code=str(scan_payload.get("error_code", ERR_INTERNAL)),
+                message=str(scan_payload.get("error_message", "arbitrage scan failed")),
+            )
+        return _render_for_args_and_exit(args=args, payload=payload, exit_code=scan_rc, result_field="result")
+
+    capped_candidates = list(scan_payload.get("candidates", []))
+    offset = (page - 1) * page_size if page_size > 0 else 0
+    end = offset + page_size if page_size > 0 else offset
+    paged_candidates = capped_candidates[offset:end] if page_size > 0 else []
 
     result: dict[str, Any] = {
-        "requested_block": block_tag,
-        "block": {
-            "number": block_number,
-            "number_hex": block_number_raw if isinstance(block_number_raw, str) else None,
-            "hash": block_result.get("hash"),
-            "timestamp_utc": block_timestamp_utc,
-            "tx_count_total": len(txs),
-            "tx_count_scanned": len(txs_to_scan),
-        },
-        "summary": {
-            "transactions_with_swap_logs": txs_with_swaps,
-            "arbitrage_candidates_total": len(candidates),
-            "arbitrage_candidates_returned": len(returned_candidates),
-            "receipt_failures": len(receipt_failures),
-            "pool_metadata_failures": len(pool_failures),
-            "unique_pools_seen": len(pool_cache),
-        },
+        "summary": scan_payload["summary"],
         "heuristic": (
             "Detect Uniswap V2/V3 swap chains in each transaction and flag cyclic token paths, "
             "multi-pool continuity, and mixed V2+V3 routing as arbitrage-like patterns."
         ),
-        "candidates": returned_candidates,
     }
-    if bool(args.include_failures):
-        result["failures"] = {
-            "receipt_failures": receipt_failures,
-            "pool_metadata_failures": pool_failures,
+    if bool(args.summary_only):
+        result["summary_only"] = True
+    else:
+        result["candidates"] = paged_candidates
+        result["blocks"] = scan_payload.get("blocks", [])
+
+    if args.page_size is not None or page != 1:
+        total_candidates = int(
+            scan_payload.get("summary", {}).get("arbitrage_candidates_total", len(capped_candidates))
+        )
+        result["pagination"] = {
+            "page": page,
+            "page_size": page_size,
+            "offset": offset,
+            "returned": len(paged_candidates),
+            "capped_candidates": len(capped_candidates),
+            "total_candidates": total_candidates,
+            "has_next_page": (end < len(capped_candidates)) if page_size > 0 else False,
+            "is_truncated_by_limit": total_candidates > len(capped_candidates),
+            "limit": limit,
         }
 
-    payload = {
-        "timestamp_utc": _timestamp(),
-        "method": "analytics.arbitrage_patterns",
-        "status": "ok",
-        "ok": True,
-        "error_code": None,
-        "error_message": None,
-        "result": result,
-    }
-    render_rc = _render_output(
-        payload=payload,
-        compact=args.compact,
-        result_only=bool(args.result_only),
-        select=args.select,
-        result_field="result",
-    )
-    if render_rc != 0:
-        return render_rc
-    return 0
+    block_rows = list(scan_payload.get("blocks", []))
+    if range_payload is not None:
+        result["range"] = range_payload
+        result["window"] = {
+            "from_block": int(range_payload["from_block"]),
+            "to_block": int(range_payload["to_block"]),
+            "blocks": len(block_rows),
+        }
+        if "latest_block" in range_payload:
+            result["window"]["latest_block"] = int(range_payload["latest_block"])
+    elif block_rows:
+        result["requested_block"] = requested_block
+        result["block"] = {
+            "number": block_rows[0].get("number"),
+            "number_hex": block_rows[0].get("number_hex"),
+            "hash": block_rows[0].get("hash"),
+            "timestamp_utc": block_rows[0].get("timestamp_utc"),
+            "tx_count_total": block_rows[0].get("tx_count_total"),
+            "tx_count_scanned": block_rows[0].get("tx_count_scanned"),
+        }
+    if bool(args.include_failures):
+        result["failures"] = {
+            "receipt_failures": scan_payload.get("receipt_failures", []),
+            "pool_metadata_failures": scan_payload.get("pool_failures", []),
+        }
+
+    payload = build_ok_payload(method="analytics.arbitrage_patterns", result=result, timestamp_fn=_timestamp)
+    return _render_for_args_and_exit(args=args, payload=payload, exit_code=0, result_field="result")
 
 
-def _eth_call_req(
+def _build_convenience_rpc_executor(
     *,
-    to: str,
-    data: str,
-    block_tag: str,
-    env: dict[str, Any],
-    timeout_seconds: float,
-) -> dict[str, Any]:
-    req: dict[str, Any] = {
-        "method": "eth_call",
-        "params": [{"to": to, "data": data}, block_tag],
-        "context": {},
-        "timeout_seconds": timeout_seconds,
-    }
-    if env:
-        req["env"] = env
-    return req
-
-
-def _resolve_ens_address(
-    *,
-    name: str,
-    block_tag: str,
     env: dict[str, Any],
     timeout_seconds: float,
     manifest_by_method: dict[str, dict[str, Any]],
+):
+    def _execute(req: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        wrapped_req: dict[str, Any] = {
+            "method": req.get("method"),
+            "params": req.get("params", []),
+            "context": {},
+            "timeout_seconds": timeout_seconds,
+        }
+        if env:
+            wrapped_req["env"] = env
+        return run_rpc_request(req=wrapped_req, manifest_by_method=manifest_by_method)
+
+    return _execute
+
+
+def _resolve_ens_with_executor(
+    *,
+    name: str,
+    block_tag: str,
+    execute_rpc,
 ) -> tuple[int, dict[str, Any], str | None]:
-    ok, nodehash, err = ens_namehash(name)
-    if not ok:
-        payload = _build_error_payload(
-            method="ens_resolve",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=err,
-        )
-        return 2, payload, None
-
-    if not isinstance(nodehash, str) or not HEX32_RE.fullmatch(nodehash):
-        payload = _build_error_payload(
-            method="ens_resolve",
-            status="error",
-            code=ERR_INTERNAL,
-            message="internal namehash computation failed",
-        )
-        return 2, payload, None
-
-    resolver_call_data = f"0x0178b8bf{nodehash[2:]}"
-    resolver_req = _eth_call_req(
-        to=ENS_REGISTRY,
-        data=resolver_call_data,
+    return resolve_ens_address(
+        name=name,
         block_tag=block_tag,
-        env=env,
-        timeout_seconds=timeout_seconds,
+        execute_rpc=execute_rpc,
+        build_error_payload=_build_error_payload,
+        wrap_stage_failure=_wrap_stage_failure,
+        ens_namehash_fn=ens_namehash,
+        apply_transform_fn=apply_transform,
+        timestamp_fn=_timestamp,
     )
-    rc_resolver, resolver_payload = run_rpc_request(req=resolver_req, manifest_by_method=manifest_by_method)
-    if rc_resolver != 0:
-        return rc_resolver, _wrap_stage_failure("ens_resolve", "resolver lookup", resolver_payload), None
-
-    t_ok, resolver_addr, t_err = apply_transform(
-        "slice_last_20_bytes_to_address", resolver_payload.get("result")
-    )
-    if not t_ok or not isinstance(resolver_addr, str):
-        payload = _build_error_payload(
-            method="ens_resolve",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=f"resolver lookup parse failed: {t_err}",
-        )
-        payload["resolver_call"] = resolver_payload
-        return 2, payload, None
-
-    if resolver_addr.lower() == ZERO_ADDRESS:
-        payload = _build_error_payload(
-            method="ens_resolve",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message="ens resolver is not set for name",
-        )
-        payload["nodehash"] = nodehash
-        payload["resolver"] = resolver_addr
-        return 2, payload, None
-
-    addr_call_data = f"0x3b3b57de{nodehash[2:]}"
-    addr_req = _eth_call_req(
-        to=resolver_addr,
-        data=addr_call_data,
-        block_tag=block_tag,
-        env=env,
-        timeout_seconds=timeout_seconds,
-    )
-    rc_addr, addr_payload = run_rpc_request(req=addr_req, manifest_by_method=manifest_by_method)
-    if rc_addr != 0:
-        return rc_addr, _wrap_stage_failure("ens_resolve", "address lookup", addr_payload), None
-
-    a_ok, resolved_addr, a_err = apply_transform("slice_last_20_bytes_to_address", addr_payload.get("result"))
-    if not a_ok or not isinstance(resolved_addr, str):
-        payload = _build_error_payload(
-            method="ens_resolve",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=f"address lookup parse failed: {a_err}",
-        )
-        payload["resolver"] = resolver_addr
-        payload["address_call"] = addr_payload
-        return 2, payload, None
-
-    payload = {
-        "timestamp_utc": _timestamp(),
-        "method": "ens_resolve",
-        "status": "ok",
-        "ok": True,
-        "error_code": None,
-        "error_message": None,
-        "name": name,
-        "nodehash": nodehash,
-        "resolver": resolver_addr,
-        "result": resolved_addr,
-        "resolver_call": resolver_payload,
-        "address_call": addr_payload,
-    }
-    return 0, payload, resolved_addr
 
 
 def cmd_ens_resolve(args: argparse.Namespace) -> int:
@@ -3481,23 +2678,17 @@ def cmd_ens_resolve(args: argparse.Namespace) -> int:
         return int(env_or_rc)
     env = env_or_rc
 
-    exit_code, payload, _ = _resolve_ens_address(
-        name=args.name,
-        block_tag=args.at,
+    execute_rpc = _build_convenience_rpc_executor(
         env=env,
         timeout_seconds=float(args.timeout_seconds),
         manifest_by_method=manifest_by_method,
     )
-    render_rc = _render_output(
-        payload=payload,
-        compact=args.compact,
-        result_only=bool(args.result_only),
-        select=args.select,
-        result_field="result",
+    exit_code, payload, _ = _resolve_ens_with_executor(
+        name=args.name,
+        block_tag=args.at,
+        execute_rpc=execute_rpc,
     )
-    if render_rc != 0:
-        return render_rc
-    return exit_code
+    return _render_for_args_and_exit(args=args, payload=payload, exit_code=exit_code, result_field="result")
 
 
 def cmd_balance(args: argparse.Namespace) -> int:
@@ -3515,115 +2706,30 @@ def cmd_balance(args: argparse.Namespace) -> int:
         return int(env_or_rc)
     env = env_or_rc
 
-    target = str(args.target).strip()
-    if not target:
-        _print_error(
-            method="balance",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message="target cannot be empty",
-            pretty=not args.compact,
-        )
-        return 2
-
-    resolved_address = target
-    resolution_payload: dict[str, Any] | None = None
-    if "." in target:
-        rc_resolve, ens_payload, ens_addr = _resolve_ens_address(
-            name=target,
-            block_tag=args.at,
-            env=env,
-            timeout_seconds=float(args.timeout_seconds),
-            manifest_by_method=manifest_by_method,
-        )
-        if rc_resolve != 0 or not ens_addr:
-            wrapped = _wrap_stage_failure("balance", "ens resolution", ens_payload)
-            render_rc = _render_output(
-                payload=wrapped,
-                compact=args.compact,
-                result_only=bool(args.result_only),
-                select=args.select,
-                result_field="result",
-            )
-            if render_rc != 0:
-                return render_rc
-            return rc_resolve
-        resolved_address = ens_addr
-        resolution_payload = ens_payload
-
-    if not ADDRESS_RE.fullmatch(resolved_address):
-        _print_error(
-            method="balance",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message="target must be a 20-byte hex address or ENS name",
-            pretty=not args.compact,
-        )
-        return 2
-
-    req: dict[str, Any] = {
-        "method": "eth_getBalance",
-        "params": [resolved_address, args.at],
-        "context": {},
-        "timeout_seconds": float(args.timeout_seconds),
-    }
-    if env:
-        req["env"] = env
-
-    exit_code, balance_payload = run_rpc_request(req=req, manifest_by_method=manifest_by_method)
-    if exit_code != 0:
-        wrapped = _wrap_stage_failure("balance", "eth_getBalance", balance_payload)
-        render_rc = _render_output(
-            payload=wrapped,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return exit_code
-
-    t_ok, eth_value, t_err = apply_transform("wei_to_eth", balance_payload.get("result"))
-    if not t_ok:
-        _print_error(
-            method="balance",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=t_err,
-            pretty=not args.compact,
-        )
-        return 2
-
-    payload = {
-        "timestamp_utc": _timestamp(),
-        "method": "balance",
-        "status": "ok",
-        "ok": True,
-        "error_code": None,
-        "error_message": None,
-        "target": target,
-        "resolved_address": resolved_address,
-        "at": args.at,
-        "result": {
-            "wei_hex": balance_payload.get("result"),
-            "eth": eth_value,
-        },
-        "balance_call": balance_payload,
-    }
-    if resolution_payload is not None:
-        payload["ens_resolution"] = resolution_payload
-
-    render_rc = _render_output(
-        payload=payload,
-        compact=args.compact,
-        result_only=bool(args.result_only),
-        select=args.select,
-        result_field="result",
+    execute_rpc = _build_convenience_rpc_executor(
+        env=env,
+        timeout_seconds=float(args.timeout_seconds),
+        manifest_by_method=manifest_by_method,
     )
-    if render_rc != 0:
-        return render_rc
-    return 0
+
+    def _resolve_name(name: str) -> tuple[int, dict[str, Any], str | None]:
+        return _resolve_ens_with_executor(
+            name=name,
+            block_tag=args.at,
+            execute_rpc=execute_rpc,
+        )
+
+    exit_code, payload = resolve_balance(
+        target=args.target,
+        at=args.at,
+        execute_rpc=execute_rpc,
+        resolve_ens_address_fn=_resolve_name,
+        build_error_payload=_build_error_payload,
+        wrap_stage_failure=_wrap_stage_failure,
+        apply_transform_fn=apply_transform,
+        timestamp_fn=_timestamp,
+    )
+    return _render_for_args_and_exit(args=args, payload=payload, exit_code=exit_code, result_field="result")
 
 
 def cmd_supported_methods(args: argparse.Namespace) -> int:
@@ -3677,6 +2783,28 @@ def _add_request_output_args(parser: argparse.ArgumentParser, *, label: str) -> 
     parser.add_argument("--request-file", help=f"{label} request JSON file")
     parser.add_argument("--request-json", help=f"{label} request JSON string")
     _add_output_args(parser)
+
+
+def _add_analytics_window_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--last-blocks", type=int, help="scan latest N blocks")
+    parser.add_argument("--since", help="time window like 30m, 24h, 7d")
+
+
+def _add_analytics_runtime_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")
+    parser.add_argument("--env-json", help="runtime env object as JSON")
+    parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    _add_output_args(parser)
+
+
+def _add_analytics_scan_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--chunk-size", type=int, default=2000)
+    parser.add_argument("--max-chunks", type=int, default=200)
+    parser.add_argument("--max-logs", type=int, default=10000)
+    parser.add_argument("--limit", type=int, help="cap decoded rows")
+    parser.add_argument("--no-adaptive-split", action="store_true")
+    parser.add_argument("--allow-heavy-read", action="store_true")
+    parser.add_argument("--checkpoint-file", help="json checkpoint path for resumable scans")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -3798,19 +2926,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scan Uniswap V2 Swap logs for one pool and compute net flow",
     )
     swap_flow_parser.add_argument("--pool", required=True, help="Uniswap V2 pair address")
-    swap_flow_parser.add_argument("--last-blocks", type=int, help="scan latest N blocks")
-    swap_flow_parser.add_argument("--since", help="time window like 30m, 24h, 7d")
-    swap_flow_parser.add_argument("--chunk-size", type=int, default=2000)
-    swap_flow_parser.add_argument("--max-chunks", type=int, default=200)
-    swap_flow_parser.add_argument("--max-logs", type=int, default=10000)
-    swap_flow_parser.add_argument("--limit", type=int, help="cap decoded rows")
-    swap_flow_parser.add_argument("--no-adaptive-split", action="store_true")
-    swap_flow_parser.add_argument("--allow-heavy-read", action="store_true")
-    swap_flow_parser.add_argument("--checkpoint-file", help="json checkpoint path for resumable scans")
-    swap_flow_parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")
-    swap_flow_parser.add_argument("--env-json", help="runtime env object as JSON")
-    swap_flow_parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
-    _add_output_args(swap_flow_parser)
+    _add_analytics_window_args(swap_flow_parser)
+    _add_analytics_scan_args(swap_flow_parser)
+    _add_analytics_runtime_args(swap_flow_parser)
     swap_flow_parser.set_defaults(func=cmd_analytics_dex_swap_flow)
 
     new_pools_parser = analytics_sub.add_parser(
@@ -3823,31 +2941,32 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("uniswap-v2", "uniswap-v3"),
         default="uniswap-v2",
     )
-    new_pools_parser.add_argument("--last-blocks", type=int, help="scan latest N blocks")
-    new_pools_parser.add_argument("--since", help="time window like 30m, 24h, 7d")
-    new_pools_parser.add_argument("--chunk-size", type=int, default=2000)
-    new_pools_parser.add_argument("--max-chunks", type=int, default=200)
-    new_pools_parser.add_argument("--max-logs", type=int, default=10000)
-    new_pools_parser.add_argument("--limit", type=int, help="cap decoded rows")
-    new_pools_parser.add_argument("--no-adaptive-split", action="store_true")
-    new_pools_parser.add_argument("--allow-heavy-read", action="store_true")
-    new_pools_parser.add_argument("--checkpoint-file", help="json checkpoint path for resumable scans")
-    new_pools_parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")
-    new_pools_parser.add_argument("--env-json", help="runtime env object as JSON")
-    new_pools_parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
-    _add_output_args(new_pools_parser)
+    _add_analytics_window_args(new_pools_parser)
+    _add_analytics_scan_args(new_pools_parser)
+    _add_analytics_runtime_args(new_pools_parser)
     new_pools_parser.set_defaults(func=cmd_analytics_factory_new_pools)
 
     arbitrage_parser = analytics_sub.add_parser(
         "arbitrage-patterns",
-        help="Inspect one block and flag arbitrage-like swap routing patterns",
+        help="Inspect one block or block window and flag arbitrage-like swap routing patterns",
     )
     arbitrage_parser.add_argument(
         "--block",
-        default="latest",
         help="block tag (latest/earliest/pending/safe/finalized) or block number",
     )
+    _add_analytics_window_args(arbitrage_parser)
     arbitrage_parser.add_argument("--limit", type=int, default=10, help="cap returned candidates")
+    arbitrage_parser.add_argument(
+        "--page",
+        type=int,
+        default=1,
+        help="1-based candidate page index within the capped candidate set",
+    )
+    arbitrage_parser.add_argument(
+        "--page-size",
+        type=int,
+        help="candidate rows per page (defaults to --limit)",
+    )
     arbitrage_parser.add_argument(
         "--min-swaps",
         type=int,
@@ -3857,7 +2976,12 @@ def build_parser() -> argparse.ArgumentParser:
     arbitrage_parser.add_argument(
         "--max-transactions",
         type=int,
-        help="scan only the first N transactions from the block",
+        help="scan only the first N transactions from each block",
+    )
+    arbitrage_parser.add_argument(
+        "--no-block-receipts",
+        action="store_true",
+        help="disable eth_getBlockReceipts fast-path and fetch receipts per transaction",
     )
     arbitrage_parser.add_argument(
         "--include-swaps",
@@ -3869,10 +2993,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="include receipt/pool metadata failure details",
     )
-    arbitrage_parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="method manifest path")
-    arbitrage_parser.add_argument("--env-json", help="runtime env object as JSON")
-    arbitrage_parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
-    _add_output_args(arbitrage_parser)
+    arbitrage_parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="return summary/range metadata without candidate or per-block row payloads",
+    )
+    _add_analytics_runtime_args(arbitrage_parser)
     arbitrage_parser.set_defaults(func=cmd_analytics_arbitrage_patterns)
 
     list_parser = sub.add_parser("supported-methods", help="List enabled methods from manifest")

@@ -26,9 +26,13 @@ Target commands:
 Shipped:
 1. `analytics dex-swap-flow` (Uniswap V2 pool flow scan)
 2. `analytics factory-new-pools` (Uniswap V2/V3 factory creation scans)
-3. `analytics arbitrage-patterns` (single-block arbitrage-like route classification on Uniswap V2/V3 swap logs)
+3. `analytics arbitrage-patterns` (single-block and window arbitrage-like route classification on Uniswap V2/V3 swap logs, with block-receipts fast-path + fallback, plus `--summary-only` compact mode and paginated candidate output via `--page`/`--page-size`)
 4. P0 foundations:
    - event/ABI registry (`evm/scripts/analytics_registry.py`)
+   - output envelope helpers (`evm/scripts/analytics_envelopes.py`)
+   - shared row decoders (`evm/scripts/analytics_decoders.py`)
+   - shared pool metadata helper (`evm/scripts/analytics_pool_metadata.py`)
+   - shared runtime orchestration helper (`evm/scripts/analytics_runtime.py`)
    - block-range resolver with `--last-blocks` and `--since` (`evm/scripts/analytics_time_range.py`)
    - resumable log scanner wrapper (`evm/scripts/analytics_scanner.py`)
    - shared aggregators (`evm/scripts/analytics_aggregators.py`)

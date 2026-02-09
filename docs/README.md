@@ -16,7 +16,8 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `README.md`: Repository-level getting-started and human-to-agent prompt templates.
 
 ### Active learnings
-- `docs/learnings/2026-02-08-arbitrage-patterns-command.md`: Added `analytics arbitrage-patterns` for block-level arbitrage-like route detection over Uniswap V2/V3 swap paths.
+- `docs/learnings/2026-02-08-repo-simplification-audit.md`: Full simplification audit with shared analytics/render helper generalization, arbitrage engine extraction, provider capability helper reuse, compact summary mode, ENS/balance extraction, analytics envelope/runtime prelude/decoder/pool-metadata helpers, arbitrage pagination, and runtime helper-module extraction.
+- `docs/learnings/2026-02-08-arbitrage-patterns-command.md`: `analytics arbitrage-patterns` now supports single-block and window scans (`--last-blocks` / `--since`), receipt fast-path fallback, and paginated candidate output (`--page`, `--page-size`).
 - `docs/learnings/2026-02-08-rpc-default-pool-override.md`: RPC endpoint resolution now uses `ETH_RPC_URL` override first, then default pool fallback; env requirement removed.
 - `docs/learnings/2026-02-08-codex-repo-discovery-packaging.md`: Added `.agents/skills/evm` repo-discovery alias while keeping `evm/` as canonical package path.
 - `docs/learnings/2026-02-07-cast-hybrid-runtime.md`: Cast codebase findings and wrapper/cast delegation boundary.
@@ -45,9 +46,15 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `evm/scripts/adapters.py`: Method-specific preflight validations for adapter methods.
 - `evm/scripts/cast_adapter.py`: `cast` CLI adapter for RPC and low-level utility delegation.
 - `evm/scripts/analytics_registry.py`: Event/topic/selector registry for analytics commands.
+- `evm/scripts/analytics_arbitrage.py`: Dedicated arbitrage route-scanning engine used by `analytics arbitrage-patterns`.
+- `evm/scripts/analytics_envelopes.py`: Shared analytics success/result envelope builders (`range`, `summary`, `scan_summary`, optional checkpoint).
+- `evm/scripts/analytics_decoders.py`: Shared analytics log-row decoding helpers for swap-flow and factory-new-pools commands.
+- `evm/scripts/analytics_pool_metadata.py`: Shared Uniswap V2 pool metadata fetch helper (`token0`, `token1`, `decimals`) for analytics commands.
+- `evm/scripts/analytics_runtime.py`: Shared analytics runtime orchestration helpers (executor, range resolution, log scan wrapper, runtime prelude).
 - `evm/scripts/analytics_time_range.py`: `--last-blocks` / `--since` window resolution helpers.
 - `evm/scripts/analytics_scanner.py`: Reusable chunked/resumable log scan wrapper.
 - `evm/scripts/analytics_aggregators.py`: Shared analytics aggregators.
+- `evm/scripts/convenience_ens_balance.py`: Shared ENS resolution and balance convenience engine used by `ens resolve` and `balance`.
 - `evm/scripts/transforms.py`: Local transform helpers and ENS namehash support.
 - `evm/scripts/logs_engine.py`: Chunked log querying, adaptive split, and deterministic dedupe helpers.
 - `evm/scripts/abi_codec.py`: ABI encode/decode utilities for call data, outputs, and logs.
@@ -55,6 +62,7 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `evm/scripts/simulate_engine.py`: Simulation preflight helpers (`eth_call` + optional `eth_estimateGas`) with revert parsing.
 - `evm/scripts/trace_engine.py`: Trace method negotiation and unsupported-path normalization.
 - `evm/scripts/rpc_transport.py`: Hybrid transport (`cast rpc` default, direct HTTP for deterministic `eth_getLogs` orchestration).
+- `evm/scripts/provider_capabilities.py`: Shared provider capability/method-support detection helpers.
 - `evm/scripts/error_map.py`: Stable error codes/messages.
 - `evm/scripts/sync_execution_apis_inventory.py`: Inventory sync tooling from execution-apis checkout.
 - `evm/scripts/build_method_manifest.py`: Regenerates method manifest from inventory.

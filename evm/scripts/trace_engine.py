@@ -6,6 +6,7 @@ import re
 from typing import Any, Callable
 
 from error_map import ERR_TRACE_UNSUPPORTED
+from provider_capabilities import is_provider_method_missing
 
 HEX32_RE = re.compile(r"^0x[0-9a-fA-F]{64}$")
 
@@ -89,26 +90,6 @@ def _candidate_methods(normalized_request: dict[str, Any]) -> list[tuple[str, li
     ]
 
 
-def _is_provider_method_missing(payload: dict[str, Any]) -> bool:
-    rpc_response = payload.get("rpc_response")
-    if not isinstance(rpc_response, dict):
-        return False
-
-    error_obj = rpc_response.get("error")
-    if not isinstance(error_obj, dict):
-        return False
-
-    message = str(error_obj.get("message", "")).lower()
-    patterns = (
-        "method not found",
-        "does not exist",
-        "unsupported",
-        "not enabled",
-        "not available",
-    )
-    return any(p in message for p in patterns)
-
-
 def run_trace(
     *,
     normalized_request: dict[str, Any],
@@ -166,7 +147,7 @@ def run_trace(
             }
         )
 
-        if _is_provider_method_missing(payload):
+        if is_provider_method_missing(payload):
             continue
 
         return exit_code, {

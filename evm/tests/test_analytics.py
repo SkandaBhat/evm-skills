@@ -145,7 +145,16 @@ def test_analytics_arbitrage_patterns_detects_cyclic_route():
                     ],
                 },
             },
-            {"jsonrpc": "2.0", "id": 2, "result": {"logs": receipt_logs}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": [
+                    {
+                        "transactionHash": tx_hash,
+                        "logs": receipt_logs,
+                    }
+                ],
+            },
             {"jsonrpc": "2.0", "id": 3, "result": _pad_address(weth)},
             {"jsonrpc": "2.0", "id": 4, "result": _pad_address(usdc)},
             {"jsonrpc": "2.0", "id": 5, "result": _pad_address(usdc)},
@@ -197,6 +206,421 @@ def test_analytics_arbitrage_patterns_rejects_invalid_block_tag():
     payload = json.loads(proc.stdout)
     assert payload["ok"] is False
     assert payload["error_code"] == "INVALID_REQUEST"
+
+
+def test_analytics_arbitrage_patterns_last_blocks_window_uses_block_receipts():
+    tx_hash = "0x" + "c" * 64
+    tx_hash_other = "0x" + "d" * 64
+
+    pool1 = "0x1111111111111111111111111111111111111111"
+    pool2 = "0x2222222222222222222222222222222222222222"
+    weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    dai = "0x6b175474e89094c44da98b954eedeac495271d0f"
+
+    v2_swap_topic0 = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
+    sender = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    recipient = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+    swap1_data = "0x" + f"{1000:064x}{0:064x}{0:064x}{1500:064x}"  # WETH -> DAI (pool1)
+    swap2_data = "0x" + f"{1500:064x}{0:064x}{0:064x}{1005:064x}"  # DAI -> WETH (pool2)
+
+    receipt_with_swaps = {
+        "transactionHash": tx_hash,
+        "logs": [
+            {
+                "address": pool1,
+                "topics": [v2_swap_topic0, _pad_address(sender), _pad_address(recipient)],
+                "data": swap1_data,
+                "logIndex": "0x0",
+                "transactionHash": tx_hash,
+            },
+            {
+                "address": pool2,
+                "topics": [v2_swap_topic0, _pad_address(sender), _pad_address(recipient)],
+                "data": swap2_data,
+                "logIndex": "0x1",
+                "transactionHash": tx_hash,
+            },
+        ],
+    }
+    receipt_empty = {"transactionHash": tx_hash_other, "logs": []}
+
+    server, url = _serve(
+        [
+            {"jsonrpc": "2.0", "id": 1, "result": "0x65"},  # latest block for --last-blocks
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": {
+                    "number": "0x64",
+                    "hash": "0x" + "1" * 64,
+                    "timestamp": "0x65",
+                    "transactions": [
+                        {
+                            "hash": tx_hash,
+                            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "value": "0x0",
+                        }
+                    ],
+                },
+            },
+            {"jsonrpc": "2.0", "id": 3, "result": [receipt_with_swaps]},  # eth_getBlockReceipts(0x64)
+            {"jsonrpc": "2.0", "id": 4, "result": _pad_address(weth)},  # pool1 token0()
+            {"jsonrpc": "2.0", "id": 5, "result": _pad_address(dai)},  # pool1 token1()
+            {"jsonrpc": "2.0", "id": 6, "result": _pad_address(dai)},  # pool2 token0()
+            {"jsonrpc": "2.0", "id": 7, "result": _pad_address(weth)},  # pool2 token1()
+            {
+                "jsonrpc": "2.0",
+                "id": 8,
+                "result": {
+                    "number": "0x65",
+                    "hash": "0x" + "2" * 64,
+                    "timestamp": "0x66",
+                    "transactions": [
+                        {
+                            "hash": tx_hash_other,
+                            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "value": "0x0",
+                        }
+                    ],
+                },
+            },
+            {"jsonrpc": "2.0", "id": 9, "result": [receipt_empty]},  # eth_getBlockReceipts(0x65)
+        ]
+    )
+    try:
+        proc = _run_analytics(
+            "arbitrage-patterns",
+            [
+                "--last-blocks",
+                "2",
+                "--manifest",
+                str(MANIFEST),
+            ],
+            {"ETH_RPC_URL": url},
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["ok"] is True
+        result = payload["result"]
+        assert result["range"]["from_block"] == 100
+        assert result["range"]["to_block"] == 101
+        assert result["summary"]["blocks_scanned"] == 2
+        assert result["summary"]["arbitrage_candidates_total"] == 1
+        assert result["summary"]["receipt_collection"]["eth_getBlockReceipts_blocks"] == 2
+        assert result["summary"]["receipt_collection"]["eth_getTransactionReceipt_calls"] == 0
+        assert len(result["blocks"]) == 2
+        assert len(result["candidates"]) == 1
+        assert result["candidates"][0]["tx_hash"] == tx_hash
+        assert result["candidates"][0]["has_cycle"] is True
+    finally:
+        _stop(server)
+
+
+def test_analytics_arbitrage_patterns_falls_back_when_block_receipts_unsupported():
+    tx_hash = "0x" + "e" * 64
+    block_number_hex = "0x64"
+
+    pool1 = "0x1111111111111111111111111111111111111111"
+    pool2 = "0x2222222222222222222222222222222222222222"
+    weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    dai = "0x6b175474e89094c44da98b954eedeac495271d0f"
+
+    v2_swap_topic0 = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
+    sender = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    recipient = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+    swap1_data = "0x" + f"{1000:064x}{0:064x}{0:064x}{1500:064x}"  # WETH -> DAI
+    swap2_data = "0x" + f"{1500:064x}{0:064x}{0:064x}{1010:064x}"  # DAI -> WETH
+
+    receipt_logs = [
+        {
+            "address": pool1,
+            "topics": [v2_swap_topic0, _pad_address(sender), _pad_address(recipient)],
+            "data": swap1_data,
+            "logIndex": "0x0",
+            "transactionHash": tx_hash,
+        },
+        {
+            "address": pool2,
+            "topics": [v2_swap_topic0, _pad_address(sender), _pad_address(recipient)],
+            "data": swap2_data,
+            "logIndex": "0x1",
+            "transactionHash": tx_hash,
+        },
+    ]
+
+    server, url = _serve(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "number": block_number_hex,
+                    "hash": "0x" + "3" * 64,
+                    "timestamp": "0x65",
+                    "transactions": [
+                        {
+                            "hash": tx_hash,
+                            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "value": "0x0",
+                        }
+                    ],
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "error": {"code": -32601, "message": "Method not found"},
+            },  # eth_getBlockReceipts unsupported
+            {"jsonrpc": "2.0", "id": 3, "result": {"logs": receipt_logs}},  # fallback receipt
+            {"jsonrpc": "2.0", "id": 4, "result": _pad_address(weth)},  # pool1 token0()
+            {"jsonrpc": "2.0", "id": 5, "result": _pad_address(dai)},  # pool1 token1()
+            {"jsonrpc": "2.0", "id": 6, "result": _pad_address(dai)},  # pool2 token0()
+            {"jsonrpc": "2.0", "id": 7, "result": _pad_address(weth)},  # pool2 token1()
+        ]
+    )
+    try:
+        proc = _run_analytics(
+            "arbitrage-patterns",
+            [
+                "--block",
+                block_number_hex,
+                "--manifest",
+                str(MANIFEST),
+            ],
+            {"ETH_RPC_URL": url},
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["ok"] is True
+        result = payload["result"]
+        assert result["summary"]["arbitrage_candidates_total"] == 1
+        assert result["summary"]["receipt_collection"]["eth_getBlockReceipts_blocks"] == 0
+        assert result["summary"]["receipt_collection"]["eth_getBlockReceipts_failures"] == 1
+        assert result["summary"]["receipt_collection"]["eth_getBlockReceipts_method_missing"] == 1
+        assert result["summary"]["receipt_collection"]["eth_getTransactionReceipt_calls"] == 1
+
+        methods = [call.get("method") for call in _RPCHandler.calls]
+        assert "eth_getBlockReceipts" in methods
+        assert "eth_getTransactionReceipt" in methods
+    finally:
+        _stop(server)
+
+
+def test_analytics_arbitrage_patterns_summary_only_hides_rows():
+    tx_hash = "0x" + "f" * 64
+    block_number_hex = "0x64"
+
+    pool1 = "0x1111111111111111111111111111111111111111"
+    pool2 = "0x2222222222222222222222222222222222222222"
+    weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    dai = "0x6b175474e89094c44da98b954eedeac495271d0f"
+
+    v2_swap_topic0 = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
+    sender = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    recipient = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+    swap1_data = "0x" + f"{1000:064x}{0:064x}{0:064x}{1500:064x}"  # WETH -> DAI
+    swap2_data = "0x" + f"{1500:064x}{0:064x}{0:064x}{1012:064x}"  # DAI -> WETH
+
+    server, url = _serve(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "number": block_number_hex,
+                    "hash": "0x" + "4" * 64,
+                    "timestamp": "0x65",
+                    "transactions": [
+                        {
+                            "hash": tx_hash,
+                            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "value": "0x0",
+                        }
+                    ],
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": [
+                    {
+                        "transactionHash": tx_hash,
+                        "logs": [
+                            {
+                                "address": pool1,
+                                "topics": [v2_swap_topic0, _pad_address(sender), _pad_address(recipient)],
+                                "data": swap1_data,
+                                "logIndex": "0x0",
+                                "transactionHash": tx_hash,
+                            },
+                            {
+                                "address": pool2,
+                                "topics": [v2_swap_topic0, _pad_address(sender), _pad_address(recipient)],
+                                "data": swap2_data,
+                                "logIndex": "0x1",
+                                "transactionHash": tx_hash,
+                            },
+                        ],
+                    }
+                ],
+            },
+            {"jsonrpc": "2.0", "id": 3, "result": _pad_address(weth)},  # pool1 token0()
+            {"jsonrpc": "2.0", "id": 4, "result": _pad_address(dai)},  # pool1 token1()
+            {"jsonrpc": "2.0", "id": 5, "result": _pad_address(dai)},  # pool2 token0()
+            {"jsonrpc": "2.0", "id": 6, "result": _pad_address(weth)},  # pool2 token1()
+        ]
+    )
+    try:
+        proc = _run_analytics(
+            "arbitrage-patterns",
+            [
+                "--block",
+                block_number_hex,
+                "--summary-only",
+                "--manifest",
+                str(MANIFEST),
+            ],
+            {"ETH_RPC_URL": url},
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["ok"] is True
+        result = payload["result"]
+        assert result["summary_only"] is True
+        assert result["summary"]["arbitrage_candidates_total"] == 1
+        assert "candidates" not in result
+        assert "blocks" not in result
+    finally:
+        _stop(server)
+
+
+def test_analytics_arbitrage_patterns_paginates_candidates():
+    tx_hash1 = "0x" + "1" * 64
+    tx_hash2 = "0x" + "2" * 64
+    tx_hash3 = "0x" + "3" * 64
+    block_number_hex = "0x64"
+
+    pool1 = "0x1111111111111111111111111111111111111111"
+    pool2 = "0x2222222222222222222222222222222222222222"
+    weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    dai = "0x6b175474e89094c44da98b954eedeac495271d0f"
+
+    v2_swap_topic0 = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
+    sender = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    recipient = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+    swap1_data = "0x" + f"{1000:064x}{0:064x}{0:064x}{1500:064x}"  # WETH -> DAI
+    swap2_data = "0x" + f"{0:064x}{1500:064x}{1005:064x}{0:064x}"  # DAI -> WETH
+
+    def _swap_logs(tx_hash: str) -> list[dict]:
+        return [
+            {
+                "address": pool1,
+                "topics": [v2_swap_topic0, _pad_address(sender), _pad_address(recipient)],
+                "data": swap1_data,
+                "logIndex": "0x0",
+                "transactionHash": tx_hash,
+            },
+            {
+                "address": pool2,
+                "topics": [v2_swap_topic0, _pad_address(sender), _pad_address(recipient)],
+                "data": swap2_data,
+                "logIndex": "0x1",
+                "transactionHash": tx_hash,
+            },
+        ]
+
+    server, url = _serve(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "number": block_number_hex,
+                    "hash": "0x" + "5" * 64,
+                    "timestamp": "0x65",
+                    "transactions": [
+                        {
+                            "hash": tx_hash1,
+                            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "value": "0x0",
+                        },
+                        {
+                            "hash": tx_hash2,
+                            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "value": "0x0",
+                        },
+                        {
+                            "hash": tx_hash3,
+                            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "value": "0x0",
+                        },
+                    ],
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": [
+                    {"transactionHash": tx_hash1, "logs": _swap_logs(tx_hash1)},
+                    {"transactionHash": tx_hash2, "logs": _swap_logs(tx_hash2)},
+                    {"transactionHash": tx_hash3, "logs": _swap_logs(tx_hash3)},
+                ],
+            },
+            {"jsonrpc": "2.0", "id": 3, "result": _pad_address(weth)},  # pool1 token0()
+            {"jsonrpc": "2.0", "id": 4, "result": _pad_address(dai)},  # pool1 token1()
+            {"jsonrpc": "2.0", "id": 5, "result": _pad_address(weth)},  # pool2 token0()
+            {"jsonrpc": "2.0", "id": 6, "result": _pad_address(dai)},  # pool2 token1()
+        ]
+    )
+    try:
+        proc = _run_analytics(
+            "arbitrage-patterns",
+            [
+                "--block",
+                block_number_hex,
+                "--limit",
+                "3",
+                "--page",
+                "2",
+                "--page-size",
+                "1",
+                "--manifest",
+                str(MANIFEST),
+            ],
+            {"ETH_RPC_URL": url},
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["ok"] is True
+        result = payload["result"]
+        assert result["summary"]["arbitrage_candidates_total"] == 3
+        assert len(result["candidates"]) == 1
+        assert result["candidates"][0]["tx_hash"] == tx_hash2
+
+        pagination = result["pagination"]
+        assert pagination["page"] == 2
+        assert pagination["page_size"] == 1
+        assert pagination["offset"] == 1
+        assert pagination["returned"] == 1
+        assert pagination["capped_candidates"] == 3
+        assert pagination["total_candidates"] == 3
+        assert pagination["has_next_page"] is True
+        assert pagination["is_truncated_by_limit"] is False
+        assert pagination["limit"] == 3
+    finally:
+        _stop(server)
+
 
 def test_analytics_factory_new_pools_uniswap_v2():
     factory = "0xfafafafafafafafafafafafafafafafafafafafa"

@@ -11,7 +11,7 @@ This repo provides an `evm` skill with deterministic, policy-first commands for:
 6. simulation preflight,
 7. trace negotiation,
 8. high-level analytics commands (`analytics dex-swap-flow`, `analytics factory-new-pools`).
-9. block-level arbitrage pattern detection (`analytics arbitrage-patterns`).
+9. block/window-level arbitrage pattern detection (`analytics arbitrage-patterns`).
 
 ## Runtime Requirements
 1. `python3`
@@ -103,6 +103,21 @@ Using the evm skill analytics arbitrage-patterns command, inspect the latest Eth
 Return candidate tx hashes, inferred token paths, and reasons.
 ```
 
+```text
+Using the evm skill analytics arbitrage-patterns command, scan the last 10 Ethereum blocks for arbitrage-like swap routes.
+Return per-block candidate counts plus top candidate tx hashes, inferred token paths, and reasons.
+```
+
+```text
+Using the evm skill analytics arbitrage-patterns command, scan the last 10 Ethereum blocks and return summary only.
+Use --summary-only so the output contains aggregate counters without candidate rows.
+```
+
+```text
+Using the evm skill analytics arbitrage-patterns command, scan the last 100 Ethereum blocks and return candidate page 2 with 10 rows.
+Use --limit 100 --page 2 --page-size 10 and include pagination metadata.
+```
+
 ### 3) General prompt pattern
 
 ```text
@@ -116,4 +131,9 @@ If reliability/privacy is important, ask me for `ETH_RPC_URL` and use it as over
 - Codex repo-discovery alias: `.agents/skills/evm` (symlink to `evm/`)
 - Skill entrypoint: `evm/SKILL.md`
 - Runtime wrapper: `evm/scripts/evm_rpc.py`
+- Analytics envelopes: `evm/scripts/analytics_envelopes.py`
+- Analytics decoders: `evm/scripts/analytics_decoders.py`
+- Analytics pool metadata: `evm/scripts/analytics_pool_metadata.py`
+- Analytics runtime helpers: `evm/scripts/analytics_runtime.py`
+- Convenience engine: `evm/scripts/convenience_ens_balance.py`
 - Documentation index: `docs/README.md`
