@@ -8,7 +8,6 @@ from typing import Any, Callable
 
 from logs_engine import (
     DEFAULT_CHUNK_SIZE,
-    DEFAULT_MAX_CHUNKS,
     DEFAULT_MAX_LOGS,
     DEFAULT_HEAVY_READ_THRESHOLD,
     is_heavy_read,
@@ -18,6 +17,7 @@ from logs_engine import (
 
 ERR_ANALYTICS_CHECKPOINT_INVALID = "ANALYTICS_CHECKPOINT_INVALID"
 ERR_ANALYTICS_HEAVY_READ_DENIED = "ANALYTICS_HEAVY_READ_DENIED"
+ANALYTICS_DEFAULT_MAX_CHUNKS = 1_200
 
 RpcExecutor = Callable[[dict[str, Any]], tuple[int, dict[str, Any]]]
 
@@ -71,7 +71,7 @@ def scan_logs(
     env: dict[str, Any],
     timeout_seconds: float,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-    max_chunks: int = DEFAULT_MAX_CHUNKS,
+    max_chunks: int = ANALYTICS_DEFAULT_MAX_CHUNKS,
     max_logs: int = DEFAULT_MAX_LOGS,
     adaptive_split: bool = True,
     heavy_read_block_range_threshold: int = DEFAULT_HEAVY_READ_THRESHOLD,
@@ -205,4 +205,3 @@ def scan_logs(
         payload = dict(payload)
         payload["checkpoint"] = str(checkpoint_path)
     return rc, payload
-

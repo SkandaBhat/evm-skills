@@ -56,6 +56,7 @@ from analytics_runtime import (  # noqa: E402
     runtime_or_exit as analytics_runtime_or_exit,
     scan_logs_or_exit as analytics_scan_logs_or_exit,
 )
+from analytics_scanner import ANALYTICS_DEFAULT_MAX_CHUNKS  # noqa: E402
 from analytics_registry import (  # noqa: E402
     UNISWAP_V2_PAIR_CREATED_EVENT,
     UNISWAP_V2_PAIR_CREATED_TOPIC0,
@@ -2799,7 +2800,7 @@ def _add_analytics_runtime_args(parser: argparse.ArgumentParser) -> None:
 
 def _add_analytics_scan_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--chunk-size", type=int, default=2000)
-    parser.add_argument("--max-chunks", type=int, default=200)
+    parser.add_argument("--max-chunks", type=int, default=ANALYTICS_DEFAULT_MAX_CHUNKS)
     parser.add_argument("--max-logs", type=int, default=10000)
     parser.add_argument("--limit", type=int, help="cap decoded rows")
     parser.add_argument("--no-adaptive-split", action="store_true")
