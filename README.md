@@ -92,6 +92,15 @@ Cast-owned responsibilities:
 - Low-level JSON-RPC transport for most methods.
 - ABI primitives and utility conversions.
 
+## Roadmap
+
+Wishlist items:
+- Broader DEX analytics coverage beyond Uniswap (additional pool/event models).
+- Smarter provider-aware scan tuning with automatic backoff and chunk-size adaptation.
+- Higher-signal route triage scoring with clearer reason labels for candidate ranking.
+- Richer wallet intelligence workflows (balances, approvals, and exposure snapshots).
+- First-class report outputs for downstream automation and dashboard ingestion.
+
 ## References
 
 - Codex repo-discovery path: `.agents/skills/evm` (symlink to `evm/`)
