@@ -1,10 +1,10 @@
 # evm
 
-`evm` is a searcher-oriented Ethereum JSON-RPC skill.
+`evm` is an Ethereum JSON-RPC skill for agent workflows.
 
 It gives you a policy-first wrapper for safety and consistency, while delegating low-level RPC/ABI execution to `cast`.
 
-If you want to inspect blocks, decode DEX activity, preflight actions, and debug failures without writing one-off glue scripts, this is what it is built for.
+It provides structured workflows for block inspection, DEX activity analysis, preflight simulation, and failure diagnosis without one-off glue scripts.
 
 ## High-Level Features
 
@@ -28,6 +28,14 @@ If `ETH_RPC_URL` is not set, the wrapper uses a built-in Ethereum mainnet pool a
 2. `https://eth.drpc.org`
 3. `https://1rpc.io/eth`
 4. `https://eth.llamarpc.com`
+
+## Install (Codex / Claude Code)
+
+Use the official installation guides:
+- Codex skills: `https://developers.openai.com/codex/skills/`
+- Claude Code skills: `https://docs.anthropic.com/en/docs/claude-code/skills`
+
+After installing this repository's `evm` skill, restart your Codex or Claude Code session if it does not appear immediately.
 
 ## Quick Start (Codex/Claude Code)
 
@@ -87,6 +95,8 @@ Cast-owned responsibilities:
 
 - Codex repo-discovery path: `.agents/skills/evm` (symlink to `evm/`)
 - Skill entrypoint: `evm/SKILL.md`
+- Codex skills docs: `https://developers.openai.com/codex/skills/`
+- Claude Code skills docs: `https://docs.anthropic.com/en/docs/claude-code/skills`
 
 ## License
 
