@@ -1,6 +1,6 @@
 # Execution API RPC Methods
 
-Source of truth: `docs/data/execution-api-rpc-methods-2026-02-06.json`.
+Source of truth: `evm/references/rpc-method-inventory.json`.
 Source repo: https://github.com/ethereum/execution-apis @ `585763b34564202d4611d318006ea1f3efb43616`.
 
 Total methods: **69**.

@@ -87,4 +87,7 @@ Cast-owned responsibilities:
 
 - Codex repo-discovery path: `.agents/skills/evm` (symlink to `evm/`)
 - Skill entrypoint: `evm/SKILL.md`
-- Documentation index: `docs/README.md`
+
+## License
+
+MIT. See `LICENSE`.

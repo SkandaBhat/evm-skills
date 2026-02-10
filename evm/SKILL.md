@@ -1,7 +1,7 @@
 ---
 name: evm
 description: Agent workflow for EVM operations using Ethereum JSON-RPC, with cast-backed low-level execution and policy-first wrapper controls.
-license: Proprietary. LICENSE.txt has complete terms
+license: MIT. See LICENSE.
 compatibility: Requires python3, cast (Foundry CLI), and outbound internet access to Ethereum JSON-RPC endpoints. Supports optional ETH_RPC_URL override, otherwise uses built-in Ethereum mainnet RPC pool.
 ---
 
@@ -126,6 +126,5 @@ Default built-in Ethereum mainnet pool:
   - `python3 scripts/coverage_check.py --inventory references/rpc-method-inventory.json --manifest references/method-manifest.json`
 
 ## References
-- Coverage/archive plan: `docs/archive/plans/json-rpc-only-skill-plan.md`
-- Method inventory data snapshot: `docs/data/execution-api-rpc-methods-2026-02-06.json`
+- Method inventory: `references/rpc-method-inventory.json`
 - Risk model: `references/risk-tiers.md`
