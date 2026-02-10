@@ -88,6 +88,12 @@ Default built-in Ethereum mainnet pool:
   - R4 provenance completion
   - optional deeper `engine_*` payload preflight validation
 
+## Reliability note
+- Large analytics windows can hit provider quotas or timeouts.
+- Prefer a dedicated `ETH_RPC_URL` for heavier scans.
+- Tune `--chunk-size` and `--max-chunks`, or reduce the window with `--last-blocks`.
+- `--since` can be more rate-limit prone because it resolves block timestamps before scanning logs.
+
 ## High-value commands
 - List supported methods:
   - `python3 scripts/evm_rpc.py supported-methods --manifest references/method-manifest.json`

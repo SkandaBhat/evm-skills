@@ -28,6 +28,8 @@ If `ETH_RPC_URL` is not set, the wrapper uses a built-in Ethereum mainnet pool a
 3. `https://1rpc.io/eth`
 4. `https://eth.llamarpc.com`
 
+For larger analytics windows, provider quotas can cause 429/range errors. Prefer a dedicated `ETH_RPC_URL`, and tune `--chunk-size` and `--max-chunks` (or reduce the window with `--last-blocks`). `--since` can be more rate-limit prone because it resolves block timestamps first.
+
 ## Install (Codex / Claude Code)
 
 Use the official installation guides:
