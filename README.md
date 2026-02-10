@@ -28,6 +28,13 @@ If `ETH_RPC_URL` is not set, the wrapper uses a built-in Ethereum mainnet pool a
 3. `https://1rpc.io/eth`
 4. `https://eth.llamarpc.com`
 
+> Important: the built-in endpoints are public RPC nodes and are commonly rate-limited. For reliable scans, use your own RPC URL from a provider like Alchemy or Infura.
+>
+> If you are using Codex, include the RPC URL in your prompt and ask the agent to use it. The agent will pass it as `ETH_RPC_URL` when running wrapper commands.
+>
+> Prompt example:
+> `Use this RPC URL for this task: https://eth-mainnet.g.alchemy.com/v2/<key>. Pass it as ETH_RPC_URL for the command run.`
+
 For larger analytics windows, provider quotas can cause 429/range errors. Prefer a dedicated `ETH_RPC_URL`, and tune `--chunk-size` and `--max-chunks` (or reduce the window with `--last-blocks`). `--since` can be more rate-limit prone because it resolves block timestamps first.
 
 ## Install (Codex / Claude Code)
