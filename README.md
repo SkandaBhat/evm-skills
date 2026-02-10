@@ -32,8 +32,8 @@ If `ETH_RPC_URL` is not set, the wrapper uses a built-in Ethereum mainnet pool a
 ## Install (Codex / Claude Code)
 
 Use the official installation guides:
-- Codex skills: `https://developers.openai.com/codex/skills/`
-- Claude Code skills: `https://docs.anthropic.com/en/docs/claude-code/skills`
+- [Codex skills](https://developers.openai.com/codex/skills/)
+- [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills)
 
 After installing this repository's `evm` skill, restart your Codex or Claude Code session if it does not appear immediately.
 
@@ -95,8 +95,8 @@ Cast-owned responsibilities:
 
 - Codex repo-discovery path: `.agents/skills/evm` (symlink to `evm/`)
 - Skill entrypoint: `evm/SKILL.md`
-- Codex skills docs: `https://developers.openai.com/codex/skills/`
-- Claude Code skills docs: `https://docs.anthropic.com/en/docs/claude-code/skills`
+- [Codex skills docs](https://developers.openai.com/codex/skills/)
+- [Claude Code skills docs](https://docs.anthropic.com/en/docs/claude-code/skills)
 
 ## License
 
