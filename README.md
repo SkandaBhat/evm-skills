@@ -8,14 +8,14 @@ If you want to inspect blocks, decode DEX activity, preflight actions, and debug
 
 ## High-Level Features
 
-- Block triage for arb-like routes with `analytics arbitrage-patterns` (single block or windows via `--last-blocks` / `--since`).
-- Pool-level swap flow summaries with `analytics dex-swap-flow`.
-- New pool discovery from factory events with `analytics factory-new-pools`.
-- Chunked, resumable log scanning with `logs` (adaptive split + deterministic dedupe).
-- Batched `eth_call` snapshots with `multicall`.
-- Pre-trade simulation and revert parsing with `simulate`.
-- Trace-based root-cause workflows with `trace` (provider-method negotiation included).
-- Signed transaction broadcast through the same policy path with `exec`.
+- Block triage for arb-like routes across single blocks or recent windows.
+- Pool-level swap flow summaries.
+- New pool discovery from factory events.
+- Chunked, resumable log scanning with adaptive split and deterministic dedupe.
+- Batched multi-contract state snapshots.
+- Pre-trade simulation and revert parsing.
+- Trace-based root-cause workflows with provider-method negotiation.
+- Signed transaction broadcast through the same policy path.
 
 ## Runtime Requirements
 
@@ -60,7 +60,7 @@ Return the top 5 candidates with tx hash, inferred token path, and reason.
 Summarize pool flow:
 
 ```text
-Analyze this Uniswap V2 pool over the last 1000 blocks.
+Analyze the weth/usdc uniswap v2 pool over the last 1000 blocks.
 Return token metadata, net directional flow, and top 10 swaps by absolute amount.
 ```
 

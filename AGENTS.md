@@ -3,7 +3,7 @@
 Canonical project documentation is in `docs/`.
 
 Before finishing any task with new technical facts, constraints, or decisions:
-1. Update the relevant file in `docs/learnings/` or `docs/plans/`.
+1. Update the relevant shared file in `docs/plans/`.
 2. Add a dated note to `docs/CHANGELOG.md`.
 3. Ensure `docs/README.md` links to the new or updated content.
 

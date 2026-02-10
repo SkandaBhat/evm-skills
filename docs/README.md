@@ -4,7 +4,8 @@ This directory is the source of truth for repository knowledge, decisions, and i
 
 ## Operating Rules
 - Read `docs/AGENTS.md` first.
-- Keep `docs/learnings/` and `docs/plans/` aligned with the shipped implementation.
+- Keep `docs/plans/` aligned with the shipped implementation.
+- Treat `docs/learnings/` as local-only personal notes (gitignored).
 - Update `docs/CHANGELOG.md` for every documentation change.
 - Remove obsolete documentation when it no longer reflects the current architecture.
 
@@ -15,17 +16,6 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `docs/CHANGELOG.md`: Dated log of documentation updates.
 - `README.md`: Repository-level getting-started and human-to-agent prompt templates.
 
-### Active learnings
-- `docs/learnings/2026-02-10-runtime-transport-and-analytics-usability.md`: Session learnings on cast transport behavior under restricted runtime conditions, provider quota error handling gaps in logs split heuristics, missing top-k ranking controls in `analytics dex-swap-flow`, and explicit internet dependency metadata in `evm/SKILL.md`.
-- `docs/learnings/2026-02-10-readme-searcher-install-guide.md`: Refined top-level README for human Codex/Claude users with high-level features and agent-first usage prompts.
-- `docs/learnings/2026-02-08-repo-simplification-audit.md`: Full simplification audit with shared analytics/render helper generalization, arbitrage engine extraction, provider capability helper reuse, compact summary mode, ENS/balance extraction, analytics envelope/runtime prelude/decoder/pool-metadata helpers, arbitrage pagination, and runtime helper-module extraction.
-- `docs/learnings/2026-02-08-arbitrage-patterns-command.md`: `analytics arbitrage-patterns` now supports single-block and window scans (`--last-blocks` / `--since`), receipt fast-path fallback, and paginated candidate output (`--page`, `--page-size`).
-- `docs/learnings/2026-02-08-rpc-default-pool-override.md`: RPC endpoint resolution now uses `ETH_RPC_URL` override first, then default pool fallback; env requirement removed.
-- `docs/learnings/2026-02-08-codex-repo-discovery-packaging.md`: Added `.agents/skills/evm` repo-discovery alias while keeping `evm/` as canonical package path.
-- `docs/learnings/2026-02-07-cast-hybrid-runtime.md`: Cast codebase findings and wrapper/cast delegation boundary.
-- `docs/learnings/2026-02-07-analytics-foundation-v0.1.md`: Initial analytics command rollout and shared analytics module foundation.
-- `docs/learnings/2026-02-07-simplification-pass.md`: Post-audit simplification pass (shared parsers/prelude helpers, removed custom keccak implementation).
-
 ### Data snapshots
 - `docs/data/execution-api-rpc-methods-2026-02-06.json`: Machine-readable inventory of 69 RPC methods.
 
@@ -35,7 +25,6 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `docs/plans/usability-prompt-pack.md`: Repeatable usability and skill-adherence prompt suites (quick and extended packs) with scoring rubric and tuned mainnet-safe defaults.
 
 ### Archive
-- `docs/archive/learnings/`: Historical learning notes from earlier milestones.
 - `docs/archive/plans/`: Historical superseded plans kept for provenance.
 
 ### Skill Package

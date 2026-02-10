@@ -1,6 +1,11 @@
 # Docs Changelog
 
 ## 2026-02-10
+- Removed tracked learning-note files from `docs/learnings/` and `docs/archive/learnings/` to keep personal/session notes out of version control.
+- Added `.gitignore` entries for `docs/learnings/` and `docs/archive/learnings/`.
+- Updated documentation policy/index files to treat `docs/learnings/` as local-only and keep shared knowledge in tracked `docs/plans/`.
+- Updated `evm/SKILL.md` reference from an archived learning note to a tracked data snapshot (`docs/data/execution-api-rpc-methods-2026-02-06.json`).
+- Reworded README high-level feature bullets to remove internal command names and keep user-facing workflow language.
 - Updated `evm/SKILL.md` compatibility metadata to explicitly require outbound internet access to Ethereum JSON-RPC endpoints.
 - Clarified runtime learning note: observed `cast` panic behavior was tied to restricted sandbox runtime conditions and was not reproduced after full network access was enabled in-session.
 - Added learning note: `docs/learnings/2026-02-10-runtime-transport-and-analytics-usability.md`.

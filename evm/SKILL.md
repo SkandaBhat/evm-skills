@@ -127,5 +127,5 @@ Default built-in Ethereum mainnet pool:
 
 ## References
 - Coverage/archive plan: `docs/archive/plans/json-rpc-only-skill-plan.md`
-- Method inventory learning note: `docs/archive/learnings/2026-02-06-execution-apis-rpc-inventory.md`
+- Method inventory data snapshot: `docs/data/execution-api-rpc-methods-2026-02-06.json`
 - Risk model: `references/risk-tiers.md`

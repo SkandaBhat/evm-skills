@@ -3,15 +3,15 @@
 This file defines how this repo should preserve knowledge over time.
 
 ## Core policy
-1. Keep all substantive learnings in `docs/`.
+1. Keep all substantive shared documentation in `docs/`.
 2. Update documentation in the same task where the learning happens.
 3. Keep the docs index (`docs/README.md`) current.
 4. Add an entry in `docs/CHANGELOG.md` for every docs update.
 5. Remove obsolete documentation when it no longer matches the active architecture.
 
 ## Where to put new information
-- Technical discoveries, constraints, and architecture notes: `docs/learnings/<date>-<topic>.md`
-- Execution plans and delivery milestones: `docs/plans/<topic>.md`
+- Technical discoveries, constraints, architecture notes, and execution plans: `docs/plans/<topic>.md`
+- Personal/session notes (local only, not committed): `docs/learnings/<date>-<topic>.md`
 - Machine-readable snapshots or inventories: `docs/data/`
 
 ## Update triggers
