@@ -17,7 +17,6 @@ from ._evm_rpc_helpers import (
     _run_logs,
     _run_multicall,
     _run_simulate,
-    _run_trace,
     _serve,
     _stop,
 )

@@ -17,7 +17,6 @@ from ._evm_rpc_helpers import (
     _run_logs,
     _run_multicall,
     _run_simulate,
-    _run_trace,
     _serve,
     _stop,
 )
@@ -208,17 +207,3 @@ def test_simulate_revert_decoding():
         assert payload["result"]["revert"]["data"]["reason"] == reason
     finally:
         _stop(server)
-
-def test_trace_reports_unsupported_when_methods_not_in_manifest():
-    req = {
-        "mode": "call",
-        "call_object": {
-            "to": "0x1111111111111111111111111111111111111111",
-            "data": "0x1234",
-        },
-    }
-    proc = _run_trace(req, {"ETH_RPC_URL": "http://127.0.0.1:1"})
-    assert proc.returncode == 1
-    payload = json.loads(proc.stdout)
-    assert payload["error_code"] == "TRACE_UNSUPPORTED"
-    assert isinstance(payload["attempts"], list)

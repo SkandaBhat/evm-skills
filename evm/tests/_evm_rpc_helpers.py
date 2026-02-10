@@ -128,22 +128,6 @@ def _run_simulate(
     return _run_cmd("simulate", args, extra_env=extra_env)
 
 
-def _run_trace(
-    request: dict,
-    extra_env: dict[str, str] | None = None,
-    extra_args: list[str] | None = None,
-) -> subprocess.CompletedProcess[str]:
-    args = [
-        "--manifest",
-        str(MANIFEST),
-        "--request-json",
-        json.dumps(request),
-    ]
-    if extra_args:
-        args.extend(extra_args)
-    return _run_cmd("trace", args, extra_env=extra_env)
-
-
 def _run_analytics(
     subcommand: str,
     args: list[str],

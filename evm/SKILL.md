@@ -77,10 +77,9 @@ Default built-in Ethereum mainnet pool:
 - R2 advanced capabilities (ABI + multicall) are implemented:
   - `abi` command with `encode_call`, `decode_output`, `decode_log`, selector/topic helpers
   - `multicall` command for aggregated `eth_call` workflows with per-call status and optional decode
-- R3 advanced capabilities (simulation + trace) are implemented:
+- R3 advanced capabilities (simulation) are implemented:
   - `simulate` command for `eth_call` + optional `eth_estimateGas` preflight
   - revert parsing for `Error(string)` and panic selectors
-  - `trace` command with manifest/provider capability negotiation and `TRACE_UNSUPPORTED` fallback
 - Coverage and policy tooling:
   - `scripts/build_method_manifest.py`
   - `scripts/coverage_check.py`
@@ -104,8 +103,6 @@ Default built-in Ethereum mainnet pool:
   - `python3 scripts/evm_rpc.py multicall --manifest references/method-manifest.json --request-json '{"calls":[{"id":"a","to":"0x1111111111111111111111111111111111111111","signature":"balanceOf(address)","args":["0x1111111111111111111111111111111111111111"],"decode_output":["uint256"]}]}'`
 - Simulation preflight:
   - `python3 scripts/evm_rpc.py simulate --manifest references/method-manifest.json --request-json '{"call_object":{"to":"0x1111111111111111111111111111111111111111","data":"0x70a082310000000000000000000000001111111111111111111111111111111111111111"},"include_estimate_gas":true}'`
-- Trace request (if manifest/provider supports trace methods):
-  - `python3 scripts/evm_rpc.py trace --manifest references/method-manifest.json --request-json '{"mode":"call","call_object":{"to":"0x1111111111111111111111111111111111111111","data":"0x1234"}}'`
 - Balance convenience:
   - `python3 scripts/evm_rpc.py balance vitalik.eth --manifest references/method-manifest.json`
 - ENS convenience:

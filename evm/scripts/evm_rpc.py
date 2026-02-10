@@ -41,7 +41,6 @@ from error_map import (  # noqa: E402
     ERR_RPC_REMOTE,
     ERR_RPC_TRANSPORT,
     ERR_SIMULATION_REVERTED,
-    ERR_TRACE_UNSUPPORTED,
     ERR_RPC_TIMEOUT,
 )
 from adapters import validate_adapter_preflight  # noqa: E402
@@ -79,7 +78,6 @@ from rpc_contract import (  # noqa: E402
 )
 from rpc_transport import invoke_rpc  # noqa: E402
 from simulate_engine import normalize_simulation_request, run_simulation  # noqa: E402
-from trace_engine import normalize_trace_request, run_trace  # noqa: E402
 from transforms import apply_transform, ens_namehash  # noqa: E402
 from quantity import parse_nonnegative_quantity_str  # noqa: E402
 from logs_engine import (  # noqa: E402
@@ -1613,101 +1611,6 @@ def cmd_simulate(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_trace(args: argparse.Namespace) -> int:
-    ok_manifest, manifest_or_rc = _require_manifest(args)
-    if not ok_manifest:
-        return int(manifest_or_rc)
-    manifest_by_method = manifest_or_rc
-
-    try:
-        request = _parse_json_request_from_args(args, command="trace")
-    except Exception as err:  # noqa: BLE001
-        _print_error(
-            method="trace",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=str(err),
-            pretty=not args.compact,
-        )
-        return 2
-
-    ok, normalized, err = normalize_trace_request(request)
-    if not ok:
-        payload = _build_error_payload(
-            method="trace",
-            status="error",
-            code=ERR_INVALID_REQUEST,
-            message=err,
-        )
-        if isinstance(request, dict):
-            payload["request"] = _sanitized_request(request)
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return 2
-
-    def execute(req: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-        return run_rpc_request(req=req, manifest_by_method=manifest_by_method)
-
-    exit_code, trace_result = run_trace(
-        normalized_request=normalized,
-        manifest_by_method=manifest_by_method,
-        execute_rpc=execute,
-    )
-    if exit_code != 0 or not bool(trace_result.get("ok", False)):
-        payload = _build_error_payload(
-            method="trace",
-            status=str(trace_result.get("status", "error")),
-            code=str(trace_result.get("error_code", ERR_TRACE_UNSUPPORTED)),
-            message=str(trace_result.get("error_message", "trace failed")),
-        )
-        payload["request"] = _sanitized_request(request if isinstance(request, dict) else {})
-        if "attempts" in trace_result:
-            payload["attempts"] = trace_result["attempts"]
-        if "cause" in trace_result:
-            payload["cause"] = trace_result["cause"]
-        render_rc = _render_output(
-            payload=payload,
-            compact=args.compact,
-            result_only=bool(args.result_only),
-            select=args.select,
-            result_field="result",
-        )
-        if render_rc != 0:
-            return render_rc
-        return exit_code
-
-    payload = {
-        "timestamp_utc": _timestamp(),
-        "method": "trace",
-        "status": "ok",
-        "ok": True,
-        "error_code": None,
-        "error_message": None,
-        "request": _sanitized_request(request),
-        "result": trace_result.get("result"),
-        "method_used": trace_result.get("method_used"),
-        "trace_payload": trace_result.get("trace_payload"),
-        "attempts": trace_result.get("attempts", []),
-    }
-    render_rc = _render_output(
-        payload=payload,
-        compact=args.compact,
-        result_only=bool(args.result_only),
-        select=args.select,
-        result_field="result",
-    )
-    if render_rc != 0:
-        return render_rc
-    return 0
-
-
 def _parse_chain_request_from_args(args: argparse.Namespace) -> dict[str, Any]:
     if args.request_file:
         with open(args.request_file, encoding="utf-8") as f:
@@ -2885,10 +2788,6 @@ def build_parser() -> argparse.ArgumentParser:
     simulate_parser = sub.add_parser("simulate", help="Run eth_call and optional eth_estimateGas preflight")
     _add_manifest_request_output_args(simulate_parser, label="simulate")
     simulate_parser.set_defaults(func=cmd_simulate)
-
-    trace_parser = sub.add_parser("trace", help="Run trace methods when provider and manifest support them")
-    _add_manifest_request_output_args(trace_parser, label="trace")
-    trace_parser.set_defaults(func=cmd_trace)
 
     chain_parser = sub.add_parser("chain", help="Execute a chain of JSON-RPC and transform steps")
     _add_manifest_request_output_args(chain_parser, label="chain")

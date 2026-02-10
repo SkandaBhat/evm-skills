@@ -14,7 +14,6 @@ It provides structured workflows for block inspection, DEX activity analysis, pr
 - Chunked, resumable log scanning with adaptive split and deterministic dedupe.
 - Batched multi-contract state snapshots.
 - Pre-trade simulation and revert parsing.
-- Trace-based root-cause workflows with provider-method negotiation.
 - Signed transaction broadcast through the same policy path.
 
 ## Runtime Requirements
