@@ -1,5 +1,27 @@
 # Docs Changelog
 
+## 2026-02-10
+- Updated `evm/SKILL.md` compatibility metadata to explicitly require outbound internet access to Ethereum JSON-RPC endpoints.
+- Clarified runtime learning note: observed `cast` panic behavior was tied to restricted sandbox runtime conditions and was not reproduced after full network access was enabled in-session.
+- Added learning note: `docs/learnings/2026-02-10-runtime-transport-and-analytics-usability.md`.
+- Captured session findings:
+  - `cast` transport panic risk for read-tier flows under restricted sandbox runtime conditions,
+  - provider quota/rate-limit errors not fully covered by current logs adaptive split patterns,
+  - missing built-in top-k ranking controls in `analytics dex-swap-flow`.
+- Updated docs index (`docs/README.md`) to include the new runtime/analytics learning note.
+- Simplified README prompt examples to short standalone requests and removed redundant "using the evm skill" phrasing.
+- Adjusted README prompt example wording to prefer command-agnostic "run analytics" phrasing over internal subcommand names.
+- Removed script-level quick-start commands from top-level `README.md` and replaced them with Codex/Claude prompt-first usage examples.
+- Removed internal script path references from top-level `README.md` references section.
+- Replaced README "Install or Skip" framing with a single high-level features section, per readability feedback.
+- Refined top-level `README.md` language to be more human-readable while keeping command scope and architecture constraints unchanged.
+- Reintroduced explicit "install vs skip" framing and non-goals in the README for faster fit evaluation.
+- Rewrote top-level `README.md` as a searcher-focused install-decision guide.
+- Added explicit capability mapping from implemented commands to searcher workflows (`analytics`, `logs`, `multicall`, `simulate`, `trace`, `exec`).
+- Added explicit non-goals to reduce install-time ambiguity (no in-wrapper private relay/bundle integration, no websocket subscription path, no built-in profitability engine).
+- Added learning note: `docs/learnings/2026-02-10-readme-searcher-install-guide.md`.
+- Updated docs index (`docs/README.md`) to include the new learning note.
+
 ## 2026-02-08
 - Continued analytics runtime decomposition:
   - extracted shared analytics runtime helpers into `evm/scripts/analytics_runtime.py`,

@@ -1,139 +1,90 @@
 # evm
 
-Agent skill runtime for Ethereum JSON-RPC workflows with a cast-backed runtime.
+`evm` is a searcher-oriented Ethereum JSON-RPC skill.
 
-This repo provides an `evm` skill with deterministic, policy-first commands for:
-1. direct JSON-RPC execution,
-2. multi-step chains with templating,
-3. logs over ranges,
-4. ABI encode/decode,
-5. multicall-style aggregated reads,
-6. simulation preflight,
-7. trace negotiation,
-8. high-level analytics commands (`analytics dex-swap-flow`, `analytics factory-new-pools`).
-9. block/window-level arbitrage pattern detection (`analytics arbitrage-patterns`).
+It gives you a policy-first wrapper for safety and consistency, while delegating low-level RPC/ABI execution to `cast`.
+
+If you want to inspect blocks, decode DEX activity, preflight actions, and debug failures without writing one-off glue scripts, this is what it is built for.
+
+## High-Level Features
+
+- Block triage for arb-like routes with `analytics arbitrage-patterns` (single block or windows via `--last-blocks` / `--since`).
+- Pool-level swap flow summaries with `analytics dex-swap-flow`.
+- New pool discovery from factory events with `analytics factory-new-pools`.
+- Chunked, resumable log scanning with `logs` (adaptive split + deterministic dedupe).
+- Batched `eth_call` snapshots with `multicall`.
+- Pre-trade simulation and revert parsing with `simulate`.
+- Trace-based root-cause workflows with `trace` (provider-method negotiation included).
+- Signed transaction broadcast through the same policy path with `exec`.
 
 ## Runtime Requirements
-1. `python3`
-2. `cast` (Foundry CLI) available in `PATH`
-3. Optional `ETH_RPC_URL` from user/session to override the default public pool (never persisted by this skill)
 
-Default mainnet pool (used only when `ETH_RPC_URL` is not set):
+1. `python3`
+2. `cast` (Foundry CLI) in `PATH`
+3. Optional `ETH_RPC_URL` if you want a specific endpoint.
+
+If `ETH_RPC_URL` is not set, the wrapper uses a built-in Ethereum mainnet pool and does not persist URLs:
 1. `https://ethereum-rpc.publicnode.com`
 2. `https://eth.drpc.org`
 3. `https://1rpc.io/eth`
 4. `https://eth.llamarpc.com`
 
-Architecture split:
-1. Wrapper-owned: policy gates, safety controls, chain templating, deterministic envelopes, logs orchestration.
-2. Cast-delegated: low-level JSON-RPC calls, ABI encode/decode primitives, selectors/topic hashes, wei/namehash utilities.
+## Quick Start (Codex/Claude Code)
 
-## Prompting Agents
-Use this section when a human is interacting with an agent like Codex or Claude Code.
+1. Start your session with the prompt preamble below.
+2. Ask for one concrete workflow (examples included right after).
+3. Keep outputs deterministic with `--result-only` or `--select` when needed.
 
-### 1) Start every session with this preamble
+## Agent Prompt Starter
+
+Use this when you want an agent to stay inside the intended operating model:
 
 ```text
 Use the `evm` skill only.
-Use JSON-RPC only via the skill wrapper commands.
-Require cast as the low-level runtime; do not replace the wrapper with ad-hoc scripts.
-Use `ETH_RPC_URL` when the user provides one; otherwise use the skill's default Ethereum mainnet RPC pool.
-Do not persist RPC URLs to disk.
-Prefer deterministic JSON output (`--compact`, `--result-only`, `--select`) when possible.
+Use JSON-RPC only through the wrapper commands.
+Require cast as the low-level runtime.
+Use ETH_RPC_URL when I provide it; otherwise use the skill's default pool.
+Do not persist RPC URLs.
+Prefer deterministic output with --result-only or --select.
 ```
 
-### 2) Reusable prompt templates
+## Prompt Examples
 
-Balance and ENS:
+Inspect latest block for arb-like routes:
 
 ```text
-Using the evm skill, get the ETH balance of vitalik.eth on ethereum mainnet.
-Return JSON with resolved address, wei, eth, block number, and timestamp.
+Analyze the latest Ethereum block for arb-like swap routes.
+Return the top 5 candidates with tx hash, inferred token path, and reason.
 ```
 
-ABI encode -> call -> decode:
+Summarize pool flow:
 
 ```text
-Using the evm skill, read USDC balanceOf(0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045).
-Do it as encode_call -> eth_call -> decode_output and return only the decoded integer.
+Analyze this Uniswap V2 pool over the last 1000 blocks.
+Return token metadata, net directional flow, and top 10 swaps by absolute amount.
 ```
 
-Multicall-style token reads:
+Preflight call and decode failures:
 
 ```text
-Using the evm skill multicall command, fetch balanceOf for the same address on USDC and WETH.
-Return one JSON object with per-call status and decoded outputs.
+Simulate this call object and include gas estimate.
+If it reverts, decode and return the revert reason.
 ```
 
-Logs query:
+## Architecture Snapshot
 
-```text
-Using the evm skill logs command, fetch Transfer logs for USDC between blocks 22000000 and 22001000.
-Use chunking and return summary plus first 3 logs only.
-```
+Wrapper-owned responsibilities:
+- Policy gates.
+- Request/response normalization.
+- Chain templating and transforms.
+- Deterministic logs orchestration and analytics envelopes.
 
-Simulation preflight:
-
-```text
-Using the evm skill simulate command, preflight this call object and include estimate gas.
-If reverted, decode and show revert reason.
-```
-
-Trace with graceful fallback:
-
-```text
-Using the evm skill trace command, trace this call.
-If trace is unsupported, return the TRACE_UNSUPPORTED payload clearly.
-```
-
-Searcher-style analytics:
-
-```text
-Using the evm skill analytics dex-swap-flow command, scan this Uniswap V2 pair over the last 5000 blocks.
-Return token0/token1 metadata, per-swap rows, and net pool flow summary.
-```
-
-```text
-Using the evm skill analytics factory-new-pools command, find new pools created by this factory over the last 24h.
-Return only pool address, token0, token1, and tx hash.
-```
-
-```text
-Using the evm skill analytics arbitrage-patterns command, inspect the latest Ethereum block for arbitrage-like swap routes.
-Return candidate tx hashes, inferred token paths, and reasons.
-```
-
-```text
-Using the evm skill analytics arbitrage-patterns command, scan the last 10 Ethereum blocks for arbitrage-like swap routes.
-Return per-block candidate counts plus top candidate tx hashes, inferred token paths, and reasons.
-```
-
-```text
-Using the evm skill analytics arbitrage-patterns command, scan the last 10 Ethereum blocks and return summary only.
-Use --summary-only so the output contains aggregate counters without candidate rows.
-```
-
-```text
-Using the evm skill analytics arbitrage-patterns command, scan the last 100 Ethereum blocks and return candidate page 2 with 10 rows.
-Use --limit 100 --page 2 --page-size 10 and include pagination metadata.
-```
-
-### 3) General prompt pattern
-
-```text
-Using the evm skill, <goal>.
-Use <command(s)>.
-Return <exact output shape>.
-If reliability/privacy is important, ask me for `ETH_RPC_URL` and use it as override.
-```
+Cast-owned responsibilities:
+- Low-level JSON-RPC transport for most methods.
+- ABI primitives and utility conversions.
 
 ## References
-- Codex repo-discovery alias: `.agents/skills/evm` (symlink to `evm/`)
+
+- Codex repo-discovery path: `.agents/skills/evm` (symlink to `evm/`)
 - Skill entrypoint: `evm/SKILL.md`
-- Runtime wrapper: `evm/scripts/evm_rpc.py`
-- Analytics envelopes: `evm/scripts/analytics_envelopes.py`
-- Analytics decoders: `evm/scripts/analytics_decoders.py`
-- Analytics pool metadata: `evm/scripts/analytics_pool_metadata.py`
-- Analytics runtime helpers: `evm/scripts/analytics_runtime.py`
-- Convenience engine: `evm/scripts/convenience_ens_balance.py`
 - Documentation index: `docs/README.md`

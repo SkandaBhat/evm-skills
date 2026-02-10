@@ -16,6 +16,8 @@ This directory is the source of truth for repository knowledge, decisions, and i
 - `README.md`: Repository-level getting-started and human-to-agent prompt templates.
 
 ### Active learnings
+- `docs/learnings/2026-02-10-runtime-transport-and-analytics-usability.md`: Session learnings on cast transport behavior under restricted runtime conditions, provider quota error handling gaps in logs split heuristics, missing top-k ranking controls in `analytics dex-swap-flow`, and explicit internet dependency metadata in `evm/SKILL.md`.
+- `docs/learnings/2026-02-10-readme-searcher-install-guide.md`: Refined top-level README for human Codex/Claude users with high-level features and agent-first usage prompts.
 - `docs/learnings/2026-02-08-repo-simplification-audit.md`: Full simplification audit with shared analytics/render helper generalization, arbitrage engine extraction, provider capability helper reuse, compact summary mode, ENS/balance extraction, analytics envelope/runtime prelude/decoder/pool-metadata helpers, arbitrage pagination, and runtime helper-module extraction.
 - `docs/learnings/2026-02-08-arbitrage-patterns-command.md`: `analytics arbitrage-patterns` now supports single-block and window scans (`--last-blocks` / `--since`), receipt fast-path fallback, and paginated candidate output (`--page`, `--page-size`).
 - `docs/learnings/2026-02-08-rpc-default-pool-override.md`: RPC endpoint resolution now uses `ETH_RPC_URL` override first, then default pool fallback; env requirement removed.

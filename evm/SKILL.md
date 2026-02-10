@@ -2,7 +2,7 @@
 name: evm
 description: Agent workflow for EVM operations using Ethereum JSON-RPC, with cast-backed low-level execution and policy-first wrapper controls.
 license: Proprietary. LICENSE.txt has complete terms
-compatibility: Requires python3 and cast (Foundry CLI). Supports optional ETH_RPC_URL override, otherwise uses built-in Ethereum mainnet RPC pool.
+compatibility: Requires python3, cast (Foundry CLI), and outbound internet access to Ethereum JSON-RPC endpoints. Supports optional ETH_RPC_URL override, otherwise uses built-in Ethereum mainnet RPC pool.
 ---
 
 # EVM JSON-RPC Wallet Skill
